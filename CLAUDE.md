@@ -42,13 +42,23 @@ hoosh (celestial context), agnosai (astronomical reasoning), joshua (game world 
 ## Architecture
 
 - `src/error.rs` — `JyotishError` enum with `thiserror`
+- `src/num.rs` — Kahan compensated summation and numerical utilities
+- `src/delta_t.rs` — Delta T (TT−UT1) via Espenak & Meeus polynomials, time scale conversions
 - `src/planet.rs` — `Planet` enum, `PlanetaryPosition` struct
 - `src/calendar.rs` — Julian/Gregorian/sidereal time/JDN conversions
-- `src/event.rs` — eclipses, conjunctions, oppositions, equinoxes, solstices
-- `src/zodiac.rs` — tropical and sidereal zodiac, constellations, cusps
-- `src/house.rs` — Placidus, Koch, Equal, Whole Sign, Porphyry house systems
-- `src/aspect.rs` — conjunction, opposition, trine, square, sextile, orbs
-- `src/transit.rs` — ingress, retrograde, station, direct motion
+- `src/coords.rs` — degree/radian conversion, ecliptic↔equatorial, mean obliquity
+- `src/sun.rs` — solar longitude, distance, equation of time (Meeus Ch. 25)
+- `src/moon.rs` — lunar longitude, latitude, distance (Meeus Ch. 47, 60 periodic terms)
+- `src/planetary.rs` — Mercury–Pluto geocentric positions (Keplerian + Kepler solver)
+- `src/nutation.rs` — IAU 1980 nutation (63 terms), precession, true obliquity
+- `src/event.rs` — equinox/solstice search, conjunction/opposition detection
+- `src/zodiac.rs` — tropical/sidereal zodiac, Lahiri ayanamsa, signs, elements, modalities
+- `src/house.rs` — Placidus, Equal, Whole Sign, Porphyry house systems
+- `src/aspect.rs` — conjunction, opposition, trine, square, sextile with configurable orbs
+- `src/transit.rs` — daily motion, ingress, retrograde station detection
+- `src/riseset.rs` — rise/set/transit times (Meeus Ch. 15 with interpolation)
+- `src/parallax.rs` — topocentric lunar parallax, horizontal parallax, Observer struct
+- `src/orbital.rs` — falak integration: enhanced Kepler solver, state vectors (feature-gated)
 - `src/logging.rs` — tracing-subscriber init (feature-gated)
 
 ## Dependencies
@@ -56,31 +66,3 @@ hoosh (celestial context), agnosai (astronomical reasoning), joshua (game world 
 - **hisab** — trigonometry, linear algebra, numerical methods
 - **chrono** — date/time handling
 - **falak** (optional, `orbital` feature) — orbital mechanics
-
-## Roadmap
-
-### P0 — Blocking (must fix before any further work)
-
-1. **Fix compilation**: `src/num.rs` exists (provides `KahanSum`) but is not declared in `lib.rs`. Both `moon.rs` and `nutation.rs` import `crate::num`. Fix: add `mod num;` to `lib.rs`.
-2. **Verify `cargo test --all-features` passes** after the fix.
-3. **Run `cargo clippy --all-features`** and fix all warnings.
-4. **Update CHANGELOG.md** — currently says modules are "stubs" but they are fully implemented (5,326 lines across 16 modules).
-
-### P1 — Testing & Hardening (v1 gate)
-
-5. Add **inline unit tests** to every module (currently only 10 integration tests — no module-level tests exist).
-6. Add **adversarial input tests** — NaN, Inf, negative values, edge dates (year 0, far past/future), invalid lat/lon for every public function.
-7. **Input/output validation audit** — ensure all public functions validate inputs (`require_finite` or equivalent) and produce finite outputs.
-8. Add `tracing::warn` on physics/domain boundary violations.
-9. Validate planetary positions against **JPL Horizons** or **VSOP87** reference data for at least Sun, Moon, and one outer planet.
-
-### P2 — Documentation & Polish (v1 readiness)
-
-10. Doc comments with formulas on all public functions.
-11. Doc tests (runnable examples in `/// # Examples` blocks).
-12. Working `examples/` directory.
-13. API stability audit — confirm all public items are intentional for v1.
-
-### Integration: hisab-mimamsa Scale 3
-
-Once v1-ready, jyotish provides the planetary position + aspect + zodiac + house data needed for hisab-mimamsa's `unified::scale_bridge::bridge_scale_3()` (planetary field → personality manifestation via bhava).

@@ -47,6 +47,12 @@ pub mod planetary;
 /// Nutation and precession corrections.
 pub mod nutation;
 
+/// Annual aberration and light-time correction.
+pub mod aberration;
+
+/// Apparent position pipeline (geometric → aberration → nutation → apparent).
+pub mod apparent;
+
 /// Celestial events — eclipses, conjunctions, oppositions, transits, equinoxes, solstices.
 pub mod event;
 
