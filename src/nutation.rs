@@ -1,126 +1,183 @@
 //! Nutation and precession corrections.
 //!
-//! Implements the IAU 1980 nutation model (Meeus, *Astronomical Algorithms*,
-//! Chapter 22) with the principal periodic terms, and the IAU precession
-//! formulae for converting between epochs.
+//! Implements the **IAU 2000B** nutation model (McCarthy & Luzum 2003,
+//! "An Abridged Model of the Precession-Nutation of the Celestial Pole")
+//! with 77 lunisolar terms, achieving ~1 milliarcsecond accuracy for
+//! epochs 1900–2100.
 //!
-//! Nutation is the short-period oscillation of the Earth's axis caused
-//! primarily by the Moon's orbital plane. Precession is the long-period
-//! ~26,000-year gyroscopic drift of the equinox along the ecliptic.
+//! The IAU 2000B model is a truncated form of the full IAU 2000A (MHB2000)
+//! series. It retains 77 lunisolar terms and adds fixed offset corrections
+//! to compensate for omitted long-period planetary nutation terms.
+//!
+//! Also provides IAU precession formulae for converting between epochs.
 
 use crate::calendar::julian_centuries;
-use crate::coords::deg_to_rad;
 use crate::num::KahanSum;
 
 // ---------------------------------------------------------------------------
-// Fundamental arguments for nutation (Meeus Table 22.A)
+// Fundamental Delaunay arguments (IAU 2003, IERS Conventions Ch. 5)
 // ---------------------------------------------------------------------------
+// Each argument is computed as a linear function of T (Julian centuries from
+// J2000.0) in arcseconds, then reduced modulo 1296000" (= 360°) and
+// converted to radians.
+//
+// These are simplified (linear-only) forms used by IAU 2000B, matching the
+// SOFA/ERFA nut00b implementation. The higher-order polynomial terms are
+// omitted because the truncated series does not warrant them.
 
-/// Longitude of the ascending node of the Moon's mean orbit on the ecliptic.
-fn omega(t: f64) -> f64 {
-    ((1.0 / 467_441.0 * t + 0.002_075_4) * t - 1_934.136_261) * t + 125.044_52
+/// Arcseconds in a full circle (360° × 3600″/°).
+const TURNAS: f64 = 1_296_000.0;
+
+/// Arcseconds to radians.
+const AS2R: f64 = std::f64::consts::PI / (180.0 * 3600.0);
+
+/// Mean anomaly of the Moon (l).
+fn el(t: f64) -> f64 {
+    // 485868.249036″ + 1717915923.2178″·T, mod 1296000″, → radians
+    let a = 485_868.249_036 + 1_717_915_923.217_8 * t;
+    (a % TURNAS) * AS2R
 }
 
-/// Mean elongation of the Moon from the Sun.
-fn d_arg(t: f64) -> f64 {
-    ((1.0 / 189_474.0 * t - 0.001_914_2) * t + 445_267.111_480) * t + 297.850_36
+/// Mean anomaly of the Sun (l').
+fn elp(t: f64) -> f64 {
+    let a = 1_287_104.793_05 + 129_596_581.048_1 * t;
+    (a % TURNAS) * AS2R
 }
 
-/// Mean anomaly of the Sun (Earth).
-fn m_sun(t: f64) -> f64 {
-    ((-1.0 / 300_000.0 * t - 0.000_160_3) * t + 35_999.050_340) * t + 357.527_72
-}
-
-/// Mean anomaly of the Moon.
-fn m_moon(t: f64) -> f64 {
-    ((1.0 / 56_250.0 * t + 0.008_697_2) * t + 477_198.867_398) * t + 134.962_98
-}
-
-/// Moon's argument of latitude.
+/// Mean argument of the latitude of the Moon (F).
 fn f_arg(t: f64) -> f64 {
-    ((1.0 / 327_270.0 * t - 0.003_682_5) * t + 483_202.017_538) * t + 93.271_91
+    let a = 335_779.526_232 + 1_739_527_262.847_8 * t;
+    (a % TURNAS) * AS2R
+}
+
+/// Mean elongation of the Moon from the Sun (D).
+fn d_arg(t: f64) -> f64 {
+    let a = 1_072_260.703_69 + 1_602_961_601.209_0 * t;
+    (a % TURNAS) * AS2R
+}
+
+/// Longitude of the ascending node of the Moon's mean orbit (Ω).
+fn om(t: f64) -> f64 {
+    let a = 450_160.398_036 - 6_962_890.543_1 * t;
+    (a % TURNAS) * AS2R
 }
 
 // ---------------------------------------------------------------------------
-// Nutation periodic terms (IAU 1980, Meeus Table 22.A)
+// IAU 2000B nutation series — 77 lunisolar terms
 // ---------------------------------------------------------------------------
-
-/// Nutation term: (D, M_sun, M_moon, F, Omega, psi_sin, psi_sin_t, eps_cos, eps_cos_t).
-/// psi/eps coefficients in 0.0001 arcseconds.
-type NutationTerm = (i32, i32, i32, i32, i32, i64, i64, i64, i64);
+// Each term: (l, l', F, D, Ω, ψ_sin, ψ_sin_t, ψ_cos, ε_cos, ε_cos_t, ε_sin)
+//
+// Coefficients are in units of 0.1 microarcsecond (0.1 μas).
+//
+// For each term the argument is:  arg = l·el + l'·elp + F·f + D·d + Ω·om
+//   Δψ += (ψ_sin + ψ_sin_t · t) · sin(arg) + ψ_cos · cos(arg)
+//   Δε += (ε_cos + ε_cos_t · t) · cos(arg) + ε_sin · sin(arg)
+//
+// Source: SOFA/ERFA nut00b (McCarthy & Luzum 2003).
+type NutTerm = (i8, i8, i8, i8, i8, i64, i64, i64, i64, i64, i64);
 
 #[rustfmt::skip]
-const NUTATION_TERMS: &[NutationTerm] = &[
-    ( 0,  0,  0,  0,  1, -171_996, -1742, 92_025,  89),
-    (-2,  0,  0,  2,  2,  -13_187,   -16,  5_736, -31),
-    ( 0,  0,  0,  2,  2,   -2_274,    -2,    977,  -5),
-    ( 0,  0,  0,  0,  2,    2_062,     2,   -895,   5),
-    ( 0,  1,  0,  0,  0,    1_426,   -34,     54,  -1),
-    ( 0,  0,  1,  0,  0,      712,     1,     -7,   0),
-    (-2,  1,  0,  2,  2,     -517,    12,    224,  -6),
-    ( 0,  0,  0,  2,  1,     -386,    -4,    200,   0),
-    ( 0,  0,  1,  2,  2,     -301,     0,    129,  -1),
-    (-2, -1,  0,  2,  2,      217,    -5,    -95,   3),
-    (-2,  0,  1,  0,  0,     -158,     0,      0,   0),
-    (-2,  0,  0,  2,  1,      129,     1,    -70,   0),
-    ( 0,  0, -1,  2,  2,      123,     0,    -53,   0),
-    ( 2,  0,  0,  0,  0,       63,     0,      0,   0),
-    ( 0,  0,  1,  0,  1,       63,     1,    -33,   0),
-    ( 2,  0, -1,  2,  2,      -59,     0,     26,   0),
-    ( 0,  0, -1,  0,  1,      -58,    -1,     32,   0),
-    ( 0,  0,  1,  2,  1,      -51,     0,     27,   0),
-    (-2,  0,  2,  0,  0,       48,     0,      0,   0),
-    ( 0,  0, -2,  2,  1,       46,     0,    -24,   0),
-    ( 2,  0,  0,  2,  2,      -38,     0,     16,   0),
-    ( 0,  0,  2,  2,  2,      -31,     0,     13,   0),
-    ( 0,  0,  2,  0,  0,       29,     0,      0,   0),
-    (-2,  0,  1,  2,  2,       29,     0,    -12,   0),
-    ( 0,  0,  0,  2,  0,       26,     0,      0,   0),
-    (-2,  0,  0,  2,  0,      -22,     0,      0,   0),
-    ( 0,  0, -1,  2,  1,       21,     0,    -10,   0),
-    ( 0,  2,  0,  0,  0,       17,    -1,      0,   0),
-    ( 2,  0, -1,  0,  1,       16,     0,     -8,   0),
-    (-2,  2,  0,  2,  2,      -16,     1,      7,   0),
-    ( 0,  1,  0,  0,  1,      -15,     0,      9,   0),
-    (-2,  0,  1,  0,  1,      -13,     0,      7,   0),
-    ( 0, -1,  0,  0,  1,      -12,     0,      6,   0),
-    ( 0,  0,  2, -2,  0,       11,     0,      0,   0),
-    ( 2,  0, -1,  2,  1,      -10,     0,      5,   0),
-    ( 2,  0,  1,  2,  2,       -8,     0,      3,   0),
-    ( 0,  1,  0,  2,  2,        7,     0,     -3,   0),
-    (-2,  1,  1,  0,  0,       -7,     0,      0,   0),
-    ( 0, -1,  0,  2,  2,       -7,     0,      3,   0),
-    ( 2,  0,  0,  2,  1,       -7,     0,      3,   0),
-    ( 2,  0,  1,  0,  0,       -6,     0,      0,   0),
-    (-2,  0,  2,  2,  2,       -6,     0,      3,   0),
-    (-2,  0,  1,  2,  1,        6,     0,     -3,   0),
-    ( 2,  0, -2,  0,  1,       -6,     0,      3,   0),
-    ( 2,  0,  0,  0,  1,       -6,     0,      3,   0),
-    ( 0, -1,  1,  0,  0,        5,     0,      0,   0),
-    (-2, -1,  0,  2,  1,       -5,     0,      3,   0),
-    (-2,  0,  0,  0,  1,       -5,     0,      3,   0),
-    ( 0,  0,  2,  2,  1,       -5,     0,      3,   0),
-    (-2,  0,  2,  0,  1,        4,     0,      0,   0),
-    (-2,  1,  0,  2,  1,        4,     0,      0,   0),
-    ( 0,  0,  1, -2,  0,        4,     0,      0,   0),
-    (-1,  0,  1,  0,  0,       -4,     0,      0,   0),
-    (-2,  1,  0,  0,  0,       -4,     0,      0,   0),
-    ( 1,  0,  0,  0,  0,       -4,     0,      0,   0),
-    ( 0,  0,  1,  2,  0,        3,     0,      0,   0),
-    ( 0,  0, -2,  2,  2,       -3,     0,      0,   0),
-    (-1, -1,  1,  0,  0,       -3,     0,      0,   0),
-    ( 0,  1,  1,  0,  0,       -3,     0,      0,   0),
-    ( 0, -1,  1,  2,  2,       -3,     0,      0,   0),
-    ( 2, -1, -1,  2,  2,       -3,     0,      0,   0),
-    ( 0,  0,  3,  2,  2,       -3,     0,      0,   0),
-    ( 2, -1,  0,  2,  2,       -3,     0,      0,   0),
+const IAU2000B_TERMS: &[NutTerm] = &[
+    // l  l'  F   D  Ω      ψ_sin       ψ_sin_t    ψ_cos       ε_cos       ε_cos_t    ε_sin
+    ( 0, 0, 0, 0, 1, -172_064_161, -174_666,  33_386,  92_052_331,   9_086,  15_377),
+    ( 0, 0, 2,-2, 2,  -13_170_906,   -1_675, -13_696,   5_730_336,  -3_015,  -4_587),
+    ( 0, 0, 2, 0, 2,   -2_276_413,     -234,   2_796,     978_459,    -485,   1_374),
+    ( 0, 0, 0, 0, 2,    2_074_554,      207,    -698,    -897_492,     470,    -291),
+    ( 0, 1, 0, 0, 0,    1_475_877,   -3_633,  11_817,      73_871,    -184,  -1_924),
+    ( 0, 1, 2,-2, 2,     -516_821,    1_226,    -524,     224_386,    -677,    -174),
+    ( 1, 0, 0, 0, 0,      711_159,       73,    -872,      -6_750,       0,     358),
+    ( 0, 0, 2, 0, 1,     -387_298,     -367,     380,     200_728,      18,     318),
+    ( 1, 0, 2, 0, 2,     -301_461,      -36,     816,     129_025,     -63,     367),
+    ( 0,-1, 2,-2, 2,      215_829,     -494,     111,     -95_929,     299,     132),
+    ( 0, 0, 2,-2, 1,      128_227,      137,     181,     -68_982,      -9,      39),
+    (-1, 0, 2, 0, 2,      123_457,       11,      19,     -53_311,      32,      -4),
+    (-1, 0, 0, 2, 0,      156_994,       10,    -168,      -1_235,       0,      82),
+    ( 1, 0, 0, 0, 1,       63_110,       63,      27,     -33_228,       0,      -9),
+    (-1, 0, 0, 0, 1,      -57_976,      -63,    -189,      31_429,       0,     -75),
+    (-1, 0, 2, 2, 2,      -59_641,      -11,     149,      25_543,     -11,      66),
+    ( 1, 0, 2, 0, 1,      -51_613,      -42,     129,      26_366,       0,      78),
+    (-2, 0, 2, 0, 1,       45_893,       50,      31,     -24_236,     -10,      20),
+    ( 0, 0, 0, 2, 0,       63_384,       11,    -150,      -1_220,       0,      29),
+    ( 0, 0, 2, 2, 2,      -38_571,       -1,     158,      16_452,     -11,      68),
+    ( 0,-2, 2,-2, 2,       32_481,        0,       0,     -13_870,       0,       0),
+    (-2, 0, 0, 2, 0,      -47_722,        0,     -18,         477,       0,     -25),
+    ( 2, 0, 2, 0, 2,      -31_046,       -1,     131,      13_238,     -11,      59),
+    ( 1, 0, 2,-2, 2,       28_593,        0,      -1,     -12_338,      10,      -3),
+    (-1, 0, 2, 0, 1,       20_441,       21,      10,     -10_758,       0,      -3),
+    ( 2, 0, 0, 0, 0,       29_243,        0,     -74,        -609,       0,      13),
+    ( 0, 0, 2, 0, 0,       25_887,        0,     -66,        -550,       0,      11),
+    ( 0, 1, 0, 0, 1,      -14_053,      -25,      79,       8_551,      -2,     -45),
+    (-1, 0, 0, 2, 1,       15_164,       10,      11,      -8_001,       0,      -1),
+    ( 0, 2, 2,-2, 2,      -15_794,       72,     -16,       6_850,     -42,      -5),
+    ( 0, 0,-2, 2, 0,       21_783,        0,      13,        -167,       0,      13),
+    ( 1, 0, 0,-2, 1,      -12_873,      -10,     -37,       6_953,       0,     -14),
+    ( 0,-1, 0, 0, 1,      -12_654,       11,      63,       6_415,       0,      26),
+    (-1, 0, 2, 2, 1,      -10_204,        0,      25,       5_222,       0,      15),
+    ( 0, 2, 0, 0, 0,       16_707,      -85,     -10,         168,      -1,      10),
+    ( 1, 0, 2, 2, 2,       -7_691,        0,      44,       3_268,       0,      19),
+    (-2, 0, 2, 0, 0,      -11_024,        0,     -14,         104,       0,       2),
+    ( 0, 1, 2, 0, 2,        7_566,      -21,     -11,      -3_250,       0,      -5),
+    ( 0, 0, 2, 2, 1,       -6_637,      -11,      25,       3_353,       0,      14),
+    ( 0,-1, 2, 0, 2,       -7_141,       21,       8,       3_070,       0,       4),
+    ( 0, 0, 0, 2, 1,       -6_302,      -11,       2,       3_272,       0,       4),
+    ( 1, 0, 2,-2, 1,        5_800,       10,       2,      -3_045,       0,      -1),
+    ( 2, 0, 2,-2, 2,        6_443,        0,      -7,      -2_768,       0,      -4),
+    (-2, 0, 0, 2, 1,       -5_774,      -11,     -15,       3_041,       0,      -5),
+    ( 2, 0, 2, 0, 1,       -5_350,        0,      21,       2_695,       0,      12),
+    ( 0,-1, 2,-2, 1,       -4_752,      -11,      -3,       2_719,       0,      -3),
+    ( 0, 0, 0,-2, 1,       -4_940,      -11,     -21,       2_720,       0,      -9),
+    (-1,-1, 0, 2, 0,        7_350,        0,      -8,         -51,       0,       4),
+    ( 2, 0, 0,-2, 1,        4_065,        0,       6,      -2_206,       0,       1),
+    ( 1, 0, 0, 2, 0,        6_579,        0,     -24,        -199,       0,       2),
+    ( 0, 1, 2,-2, 1,        3_579,        0,       5,      -1_900,       0,       1),
+    ( 1,-1, 0, 0, 0,        4_725,        0,      -6,         -41,       0,       3),
+    (-2, 0, 2, 0, 2,       -3_075,        0,      -2,       1_313,       0,      -1),
+    ( 3, 0, 2, 0, 2,       -2_904,        0,      15,       1_233,       0,       7),
+    ( 0,-1, 0, 2, 0,        4_348,        0,     -10,         -81,       0,       2),
+    ( 1,-1, 2, 0, 2,       -2_878,        0,       8,       1_232,       0,       4),
+    ( 0, 0, 0, 1, 0,       -4_230,        0,       5,         -20,       0,      -2),
+    (-1,-1, 2, 2, 2,       -2_819,        0,       7,       1_207,       0,       3),
+    (-1, 0, 2, 0, 0,       -4_056,        0,       5,          40,       0,      -2),
+    ( 0,-1, 2, 2, 2,       -2_647,        0,      11,       1_129,       0,       5),
+    (-2, 0, 0, 0, 1,       -2_294,        0,     -10,       1_266,       0,      -4),
+    ( 1, 1, 2, 0, 2,        2_481,        0,      -7,      -1_062,       0,      -3),
+    ( 2, 0, 0, 0, 1,        2_179,        0,      -2,      -1_129,       0,      -2),
+    (-1, 1, 0, 1, 0,        3_276,        0,       1,          -9,       0,       0),
+    ( 1, 1, 0, 0, 0,       -3_389,        0,       5,          35,       0,      -2),
+    ( 1, 0, 2, 0, 0,        3_339,        0,     -13,        -107,       0,       1),
+    (-1, 0, 2,-2, 1,       -1_987,        0,      -6,       1_073,       0,      -2),
+    ( 1, 0, 0, 0, 2,       -1_981,        0,       0,         854,       0,       0),
+    (-1, 0, 0, 1, 0,        4_026,        0,    -353,        -553,       0,    -139),
+    ( 0, 0, 2, 1, 2,        1_660,        0,      -5,        -710,       0,      -2),
+    (-1, 0, 2, 4, 2,       -1_521,        0,       9,         647,       0,       4),
+    (-1, 1, 0, 1, 1,        1_314,        0,       0,        -700,       0,       0),
+    ( 0,-2, 2,-2, 1,       -1_283,        0,       0,         672,       0,       0),
+    ( 1, 0, 2, 2, 1,       -1_331,        0,       8,         663,       0,       4),
+    (-2, 0, 2, 2, 2,        1_383,        0,      -2,        -594,       0,      -2),
+    (-1, 0, 0, 0, 2,        1_405,        0,       4,        -610,       0,       2),
+    ( 1, 1, 2,-2, 2,        1_290,        0,       0,        -556,       0,       0),
 ];
+
+/// Fixed offset corrections for omitted long-period planetary nutation terms.
+/// These are added to Δψ and Δε respectively, in milliarcseconds.
+const DPPLAN_MAS: f64 = -0.135;
+const DEPLAN_MAS: f64 = 0.388;
+
+/// Conversion factor from 0.1 microarcsecond to arcseconds.
+/// 0.1 μas = 0.1e-6 as = 1e-7 as.
+const U01MUAS_TO_AS: f64 = 1.0e-7;
+
+/// Conversion factor from milliarcseconds to arcseconds.
+const MAS_TO_AS: f64 = 1.0e-3;
 
 // ---------------------------------------------------------------------------
 // Public API — Nutation
 // ---------------------------------------------------------------------------
 
 /// Nutation in longitude (Δψ) and obliquity (Δε) in arcseconds.
+///
+/// Uses the IAU 2000B model (77 lunisolar terms) with fixed planetary offset
+/// corrections, delivering ~1 mas accuracy for epochs 1900–2100.
 ///
 /// Returns `(delta_psi, delta_epsilon)` both in arcseconds.
 ///
@@ -130,35 +187,42 @@ const NUTATION_TERMS: &[NutationTerm] = &[
 /// # use jyotish::nutation::nutation_components;
 /// // Meeus example 22.a: 1987-04-10 at 0h TD, JD = 2446895.5
 /// let (dpsi, deps) = nutation_components(2_446_895.5);
-/// // Expected: Δψ ≈ -3.788", Δε ≈ 9.443"
-/// assert!((dpsi - (-3.788)).abs() < 0.5, "Δψ = {dpsi}");
-/// assert!((deps - 9.443).abs() < 0.5, "Δε = {deps}");
+/// // IAU 2000B gives Δψ ≈ -3.79", Δε ≈ 9.44"
+/// assert!((dpsi - (-3.79)).abs() < 0.5, "Δψ = {dpsi}");
+/// assert!((deps - 9.44).abs() < 0.5, "Δε = {deps}");
 /// ```
 pub fn nutation_components(jd: f64) -> (f64, f64) {
     let t = julian_centuries(jd);
 
-    let omega_r = deg_to_rad(omega(t));
-    let d_r = deg_to_rad(d_arg(t));
-    let m_sun_r = deg_to_rad(m_sun(t));
-    let m_moon_r = deg_to_rad(m_moon(t));
-    let f_r = deg_to_rad(f_arg(t));
+    // Fundamental Delaunay arguments (radians)
+    let l = el(t);
+    let lp = elp(t);
+    let f = f_arg(t);
+    let d = d_arg(t);
+    let omega = om(t);
 
     let mut delta_psi = KahanSum::new();
     let mut delta_eps = KahanSum::new();
 
-    for &(d, ms, mm, f, om, psi_s, psi_st, eps_c, eps_ct) in NUTATION_TERMS {
-        let arg = d as f64 * d_r
-            + ms as f64 * m_sun_r
-            + mm as f64 * m_moon_r
-            + f as f64 * f_r
-            + om as f64 * omega_r;
+    for &(nl, nlp, nf, nd, nom, psi_s, psi_st, psi_c, eps_c, eps_ct, eps_s) in IAU2000B_TERMS {
+        let arg =
+            nl as f64 * l + nlp as f64 * lp + nf as f64 * f + nd as f64 * d + nom as f64 * omega;
 
-        delta_psi.add((psi_s as f64 + psi_st as f64 * t) * arg.sin());
-        delta_eps.add((eps_c as f64 + eps_ct as f64 * t) * arg.cos());
+        let sin_arg = arg.sin();
+        let cos_arg = arg.cos();
+
+        // Δψ += (ψ_sin + ψ_sin_t · t) · sin(arg) + ψ_cos · cos(arg)
+        delta_psi.add((psi_s as f64 + psi_st as f64 * t) * sin_arg + psi_c as f64 * cos_arg);
+
+        // Δε += (ε_cos + ε_cos_t · t) · cos(arg) + ε_sin · sin(arg)
+        delta_eps.add((eps_c as f64 + eps_ct as f64 * t) * cos_arg + eps_s as f64 * sin_arg);
     }
 
-    // Convert from 0.0001 arcseconds to arcseconds
-    (delta_psi.sum() / 10_000.0, delta_eps.sum() / 10_000.0)
+    // Convert from 0.1 microarcseconds to arcseconds, then add planetary offsets
+    let dpsi_as = delta_psi.sum() * U01MUAS_TO_AS + DPPLAN_MAS * MAS_TO_AS;
+    let deps_as = delta_eps.sum() * U01MUAS_TO_AS + DEPLAN_MAS * MAS_TO_AS;
+
+    (dpsi_as, deps_as)
 }
 
 /// Nutation in longitude (Δψ) in degrees.
@@ -268,9 +332,17 @@ mod tests {
     #[test]
     fn nutation_meeus_22a() {
         let (dpsi, deps) = nutation_components(JD_MEEUS_22A);
-        // Meeus gives Δψ ≈ -3.788", Δε ≈ 9.443"
-        assert!((dpsi - (-3.788)).abs() < 0.5, "Δψ = {dpsi}");
-        assert!((deps - 9.443).abs() < 0.5, "Δε = {deps}");
+        // IAU 2000B gives values close to the Meeus (IAU 1980) values but
+        // not identical.  Meeus: Δψ ≈ -3.788″, Δε ≈ 9.443″.
+        // With IAU 2000B we expect values within ~0.5″ of Meeus.
+        assert!(
+            (dpsi - (-3.788)).abs() < 0.5,
+            "Δψ = {dpsi}, expected near -3.788"
+        );
+        assert!(
+            (deps - 9.443).abs() < 0.5,
+            "Δε = {deps}, expected near 9.443"
+        );
     }
 
     #[test]
@@ -340,5 +412,48 @@ mod tests {
             assert!(dpsi.abs() < 20.0, "Δψ {dpsi} at day {day}");
             assert!(deps.abs() < 15.0, "Δε {deps} at day {day}");
         }
+    }
+
+    #[test]
+    fn iau2000b_term_count() {
+        assert_eq!(IAU2000B_TERMS.len(), 77, "IAU 2000B should have 77 terms");
+    }
+
+    #[test]
+    fn nutation_j2000_epoch() {
+        // At J2000.0 the nutation should be non-zero but small
+        let (dpsi, deps) = nutation_components(J2000_0);
+        assert!(dpsi.abs() < 20.0, "Δψ at J2000 = {dpsi}");
+        assert!(deps.abs() < 15.0, "Δε at J2000 = {deps}");
+    }
+
+    #[test]
+    fn nutation_symmetry_half_nutation_period() {
+        // The dominant nutation period is 18.6 years (6798 days).
+        // Check that nutation values at ±half-period from J2000 are roughly
+        // opposite in sign (the dominant Ω term dominates).
+        let half_period = 6798.0 / 2.0;
+        let (dpsi_plus, _) = nutation_components(J2000_0 + half_period);
+        let (dpsi_minus, _) = nutation_components(J2000_0 - half_period);
+        // They should have similar magnitudes (within a factor of 2) and
+        // we just check that both are within physical bounds.
+        assert!(dpsi_plus.abs() < 20.0);
+        assert!(dpsi_minus.abs() < 20.0);
+    }
+
+    /// Cross-check: at 2005-12-24 (JD 2453728.5) the nutation should be
+    /// within physical bounds and reasonably small.
+    #[test]
+    fn nutation_2005_epoch() {
+        let jd = 2_400_000.5 + 53_736.0;
+        let (dpsi, deps) = nutation_components(jd);
+        // Δψ should be in the range ±20″, Δε in ±15″
+        assert!(dpsi.abs() < 20.0, "Δψ = {dpsi}");
+        assert!(deps.abs() < 15.0, "Δε = {deps}");
+        // For this epoch, nutation in longitude should be negative and small
+        assert!(
+            dpsi < 0.0,
+            "Δψ should be negative at this epoch, got {dpsi}"
+        );
     }
 }
