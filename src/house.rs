@@ -17,6 +17,7 @@ use std::f64::consts::PI;
 
 /// Supported house systems.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum HouseSystem {
     /// Placidus (time-based division of semi-arcs)
     Placidus,

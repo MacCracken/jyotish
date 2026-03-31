@@ -20,6 +20,7 @@ use std::fmt;
 
 /// A seasonal event (equinox or solstice).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum Season {
     /// March equinox (Sun at 0° longitude).
     VernalEquinox,
@@ -155,7 +156,7 @@ pub fn seasons_of_year(jd: f64) -> Result<Vec<(Season, f64)>> {
         }
     }
 
-    results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    results.sort_by(|a, b| a.1.total_cmp(&b.1));
     Ok(results)
 }
 

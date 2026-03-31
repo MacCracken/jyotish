@@ -14,6 +14,7 @@ use std::fmt;
 
 /// A type of angular aspect between two bodies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum AspectKind {
     /// Conjunction (0°)
     Conjunction,
@@ -178,11 +179,7 @@ pub fn find_all_aspects_with_orbs(lon1: f64, lon2: f64, orbs: &[(AspectKind, f64
         })
         .collect();
 
-    aspects.sort_by(|a, b| {
-        b.strength
-            .partial_cmp(&a.strength)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    aspects.sort_by(|a, b| b.strength.total_cmp(&a.strength));
     aspects
 }
 

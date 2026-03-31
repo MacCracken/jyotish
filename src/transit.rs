@@ -16,6 +16,7 @@ use std::fmt;
 
 /// The apparent motion state of a planet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum MotionState {
     /// Moving forward through the zodiac (increasing longitude).
     Direct,

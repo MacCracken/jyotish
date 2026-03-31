@@ -101,7 +101,7 @@ impl fmt::Display for Phenomenon {
 /// };
 /// assert_eq!(evt.planet, Planet::Venus);
 /// ```
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct PhenomenonEvent {
     /// The planet involved.
     pub planet: Planet,

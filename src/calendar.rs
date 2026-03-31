@@ -447,7 +447,7 @@ fn validate_time_parts(hour: u32, minute: u32, second: f64) -> Result<()> {
             "minute {minute} not in 0..=59"
         )));
     }
-    if !(0.0..61.0).contains(&second) {
+    if !(0.0..=60.0).contains(&second) {
         return Err(JyotishError::InvalidParameter(format!(
             "second {second} not in 0.0..60.0"
         )));

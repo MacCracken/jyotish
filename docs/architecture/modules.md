@@ -23,12 +23,14 @@
 
 - `src/sun.rs` — solar longitude, distance, equation of time (VSOP87/Meeus)
 - `src/moon.rs` — lunar longitude, latitude, distance (Meeus Ch. 47, 60 periodic terms)
+- `src/elp2000/` — ELP2000-82 lunar theory (~180 terms, <2" longitude accuracy, Chapront-Touzé 1988)
 - `src/planetary.rs` — Mercury–Pluto geocentric positions (VSOP87 + Keplerian fallback)
 - `src/star.rs` — 58 navigational stars with proper motion, J2000.0 catalog
 
 ## High-Accuracy Theories
 
 - `src/vsop87/` — VSOP87D heliocentric ecliptic coordinates (J2000.0), per-planet data files (Mercury–Neptune)
+- `src/elp2000/` — ELP2000-82 lunar theory (Chapront-Touzé & Chapront 1988), ~180 periodic terms + perturbation corrections, <2" longitude accuracy
 - `src/apparent.rs` — apparent position pipeline (geometric → aberration → nutation → apparent)
 
 ## Physical Ephemerides

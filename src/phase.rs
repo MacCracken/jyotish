@@ -120,7 +120,7 @@ impl fmt::Display for LunarPhase {
 /// };
 /// assert_eq!(info.phase, LunarPhase::FullMoon);
 /// ```
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PhaseInfo {
     /// The lunar phase.
     pub phase: LunarPhase,

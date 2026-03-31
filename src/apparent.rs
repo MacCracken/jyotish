@@ -26,6 +26,7 @@ use serde::{Deserialize, Serialize};
 
 /// The type of a computed position, indicating which corrections have been applied.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum PositionType {
     /// Raw ephemeris output, no corrections applied.
     Geometric,

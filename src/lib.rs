@@ -47,6 +47,9 @@ pub mod planetary;
 /// Nutation and precession corrections.
 pub mod nutation;
 
+/// ELP2000-82 lunar theory — high-precision geocentric lunar coordinates.
+pub mod elp2000;
+
 /// VSOP87D planetary theory — heliocentric ecliptic coordinates (J2000.0).
 pub mod vsop87;
 
