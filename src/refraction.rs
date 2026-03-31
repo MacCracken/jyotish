@@ -164,6 +164,9 @@ pub fn true_to_apparent(true_alt_deg: f64) -> f64 {
 /// ```
 pub fn refraction_with_conditions(alt_deg: f64, pressure_mbar: f64, temp_celsius: f64) -> f64 {
     let base = refraction_bennett(alt_deg);
+    if pressure_mbar <= 0.0 || temp_celsius <= -273.15 {
+        return 0.0;
+    }
     let factor = (pressure_mbar / STANDARD_PRESSURE_MBAR) * (283.0 / (273.0 + temp_celsius));
     base * factor
 }

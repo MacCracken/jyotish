@@ -498,7 +498,11 @@ pub fn eclipses_in_year(year: i32) -> Result<Vec<Eclipse>> {
         }
     }
 
-    eclipses.sort_by(|a, b| a.jd_max.partial_cmp(&b.jd_max).unwrap());
+    eclipses.sort_by(|a, b| {
+        a.jd_max
+            .partial_cmp(&b.jd_max)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     Ok(eclipses)
 }
 
