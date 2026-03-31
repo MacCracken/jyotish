@@ -107,7 +107,9 @@ pub fn midheaven(lst_deg: f64, obliquity_deg: f64) -> f64 {
 
 /// Compute house cusps for the given parameters.
 ///
-/// `lst_deg` is the local sidereal time in degrees.
+/// `lst_deg` is the local sidereal time in degrees (compute from UT1 via
+/// [`crate::calendar::local_sidereal_time`] or from TT via
+/// [`crate::calendar::local_sidereal_time_tt`]).
 /// `lat_deg` is the observer's geographic latitude in degrees (positive north).
 /// `obliquity_deg` is the obliquity of the ecliptic in degrees.
 ///

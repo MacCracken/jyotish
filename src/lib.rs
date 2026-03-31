@@ -84,10 +84,10 @@ pub mod logging;
 
 // --- Core re-exports ---
 pub use calendar::{
-    DAYS_PER_JULIAN_CENTURY, J2000_0, JD_UNIX_EPOCH, day_of_week, gmst_degrees, gmst_hours,
-    gregorian_to_jd, gregorian_to_jdn, is_gregorian_leap_year, is_julian_leap_year,
+    DAYS_PER_JULIAN_CENTURY, J2000_0, JD_UNIX_EPOCH, day_of_week, gmst_degrees, gmst_degrees_tt,
+    gmst_hours, gregorian_to_jd, gregorian_to_jdn, is_gregorian_leap_year, is_julian_leap_year,
     jd_to_gregorian, jd_to_unix, jdn_to_gregorian, jdn_to_julian, julian_centuries, julian_to_jdn,
-    local_sidereal_time, unix_to_jd,
+    local_sidereal_time, local_sidereal_time_tt, unix_to_jd,
 };
 pub use error::{JyotishError, Result};
 pub use planet::{Planet, PlanetaryPosition};

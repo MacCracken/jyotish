@@ -199,9 +199,8 @@ pub fn parallax_in_altitude(apparent_alt_deg: f64, horizontal_parallax_deg: f64)
 
 /// Correct a lunar position for parallax given an observer and Julian Date.
 ///
-/// This is a convenience function that fetches the Moon's position,
-/// computes sidereal time and obliquity, and applies the topocentric
-/// correction.
+/// `jd_tt` is in TT (Terrestrial Time). The function converts to UT1
+/// internally for sidereal time computation.
 ///
 /// # Errors
 ///
@@ -216,16 +215,14 @@ pub fn parallax_in_altitude(apparent_alt_deg: f64, horizontal_parallax_deg: f64)
 /// assert!(corrected.longitude_deg >= 0.0 && corrected.longitude_deg < 360.0);
 /// ```
 pub fn correct_lunar_position(
-    jd: f64,
+    jd_tt: f64,
     observer: &Observer,
 ) -> crate::error::Result<TopocentricCorrection> {
-    let lon = crate::moon::lunar_longitude(jd);
-    let lat = crate::moon::lunar_latitude(jd);
-    let dist = crate::moon::lunar_distance_km(jd);
-    let lst = crate::calendar::local_sidereal_time(jd, observer.longitude_deg);
-    let t = crate::calendar::julian_centuries(jd);
-    let eps = crate::nutation::true_obliquity(jd);
-    let _ = t;
+    let lon = crate::moon::lunar_longitude(jd_tt);
+    let lat = crate::moon::lunar_latitude(jd_tt);
+    let dist = crate::moon::lunar_distance_km(jd_tt);
+    let lst = crate::calendar::local_sidereal_time_tt(jd_tt, observer.longitude_deg);
+    let eps = crate::nutation::true_obliquity(jd_tt);
 
     Ok(topocentric_moon(lon, lat, dist, lst, eps, observer))
 }

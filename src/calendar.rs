@@ -255,7 +255,11 @@ pub fn julian_centuries(jd: f64) -> f64 {
 // Sidereal time
 // ---------------------------------------------------------------------------
 
-/// Greenwich Mean Sidereal Time in degrees for a given Julian Date.
+/// Greenwich Mean Sidereal Time in degrees for a given Julian Date in UT1.
+///
+/// **Time scale**: `jd_ut1` must be in UT1 (Universal Time). The GMST formula
+/// is defined in terms of Earth's rotation angle, which is tied to UT1. If you
+/// have TT (Terrestrial Time), convert first with [`crate::delta_t::tt_to_ut1`].
 ///
 /// Uses the IAU 1982 formula (Meeus, *Astronomical Algorithms*, eq. 12.4).
 /// The result is normalized to the range \[0, 360).
@@ -269,18 +273,36 @@ pub fn julian_centuries(jd: f64) -> f64 {
 /// let gmst = gmst_degrees(jd);
 /// assert!((gmst - 197.693).abs() < 0.01, "got {gmst}");
 /// ```
-pub fn gmst_degrees(jd: f64) -> f64 {
-    let t = julian_centuries(jd);
+pub fn gmst_degrees(jd_ut1: f64) -> f64 {
+    let t = julian_centuries(jd_ut1);
 
     // IAU 1982 formula (Meeus eq. 12.4), Horner's for the T-polynomial part
     let gmst = 280.460_618_37
-        + 360.985_647_366_29 * (jd - J2000_0)
+        + 360.985_647_366_29 * (jd_ut1 - J2000_0)
         + (-1.0 / 38_710_000.0 * t + 0.000_387_933) * t * t;
 
     normalize_degrees(gmst)
 }
 
-/// Greenwich Mean Sidereal Time in hours for a given Julian Date.
+/// Greenwich Mean Sidereal Time in degrees, accepting a TT Julian Date.
+///
+/// Converts TT → UT1 via Delta T before computing GMST.
+/// This is the recommended entry point when working with ephemeris time.
+///
+/// # Examples
+///
+/// ```
+/// # use jyotish::calendar::gmst_degrees_tt;
+/// let jd_tt = 2_451_545.0; // J2000.0 in TT
+/// let gmst = gmst_degrees_tt(jd_tt);
+/// assert!(gmst >= 0.0 && gmst < 360.0);
+/// ```
+pub fn gmst_degrees_tt(jd_tt: f64) -> f64 {
+    let jd_ut1 = crate::delta_t::tt_to_ut1(jd_tt);
+    gmst_degrees(jd_ut1)
+}
+
+/// Greenwich Mean Sidereal Time in hours for a given Julian Date in UT1.
 ///
 /// # Examples
 ///
@@ -290,11 +312,11 @@ pub fn gmst_degrees(jd: f64) -> f64 {
 /// let hours = gmst_hours(jd);
 /// assert!((hours - 13.1795).abs() < 0.001, "got {hours}");
 /// ```
-pub fn gmst_hours(jd: f64) -> f64 {
-    gmst_degrees(jd) / 15.0
+pub fn gmst_hours(jd_ut1: f64) -> f64 {
+    gmst_degrees(jd_ut1) / 15.0
 }
 
-/// Local Sidereal Time in degrees for a given Julian Date and observer longitude.
+/// Local Sidereal Time in degrees for a given Julian Date in UT1.
 ///
 /// `longitude_deg` is positive east, negative west.
 ///
@@ -307,8 +329,16 @@ pub fn gmst_hours(jd: f64) -> f64 {
 /// let expected = (197.693 - 71.0583 + 360.0) % 360.0;
 /// assert!((lst - expected).abs() < 0.01, "got {lst}");
 /// ```
-pub fn local_sidereal_time(jd: f64, longitude_deg: f64) -> f64 {
-    normalize_degrees(gmst_degrees(jd) + longitude_deg)
+pub fn local_sidereal_time(jd_ut1: f64, longitude_deg: f64) -> f64 {
+    normalize_degrees(gmst_degrees(jd_ut1) + longitude_deg)
+}
+
+/// Local Sidereal Time in degrees, accepting a TT Julian Date.
+///
+/// Converts TT → UT1 via Delta T before computing LST.
+pub fn local_sidereal_time_tt(jd_tt: f64, longitude_deg: f64) -> f64 {
+    let jd_ut1 = crate::delta_t::tt_to_ut1(jd_tt);
+    local_sidereal_time(jd_ut1, longitude_deg)
 }
 
 // ---------------------------------------------------------------------------
