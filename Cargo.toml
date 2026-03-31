@@ -1,0 +1,37 @@
+[package]
+name = "jyotish"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license = "GPL-3.0-only"
+description = "Jyotish — astronomical computation engine for planetary positions, calendar systems, and celestial event prediction"
+homepage = "https://github.com/MacCracken/jyotish"
+repository = "https://github.com/MacCracken/jyotish"
+readme = "README.md"
+documentation = "https://docs.rs/jyotish"
+keywords = ["astronomy", "planetary", "calendar", "ephemeris", "celestial"]
+categories = ["science", "simulation"]
+publish = false
+exclude = [".claude/", ".github/", "docs/", "scripts/"]
+
+[features]
+default = []
+orbital = ["dep:falak"]
+logging = ["dep:tracing-subscriber"]
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+falak = { path = "../falak", optional = true }
+hisab = "1"
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"], optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+serde_json = "1"
+
+[[bench]]
+name = "benchmarks"
+harness = false
