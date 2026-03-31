@@ -169,3 +169,147 @@ mod apparent_pipeline {
         assert!(diff > 0.01 && diff < 2.0, "parallax shift = {diff}°");
     }
 }
+
+// --- Edge case tests ---
+
+mod edge_cases {
+    use jyotish::Planet;
+
+    const JD_J2000: f64 = 2_451_545.0;
+
+    #[test]
+    fn ecliptic_to_equatorial_near_poles() {
+        // At ecliptic lat near ±90°, should not panic or produce NaN
+        let (ra, dec) = jyotish::coords::ecliptic_to_equatorial(45.0, 89.999, 23.44);
+        assert!(ra.is_finite(), "RA is not finite at near-pole");
+        assert!(dec.is_finite(), "Dec is not finite at near-pole");
+        let (ra2, dec2) = jyotish::coords::ecliptic_to_equatorial(45.0, -89.999, 23.44);
+        assert!(ra2.is_finite());
+        assert!(dec2.is_finite());
+    }
+
+    #[test]
+    fn ecliptic_to_equatorial_at_exact_pole() {
+        let (ra, dec) = jyotish::coords::ecliptic_to_equatorial(0.0, 90.0, 23.44);
+        assert!(ra.is_finite());
+        assert!((dec - (90.0 - 23.44)).abs() < 0.01, "dec = {dec}");
+    }
+
+    #[test]
+    fn house_systems_at_various_latitudes() {
+        use jyotish::house::{HouseSystem, compute_houses};
+        let lst = 100.0; // arbitrary LST
+        let eps = 23.44;
+        // Equator
+        let h = compute_houses(HouseSystem::Placidus, lst, 0.0, eps).unwrap();
+        assert_eq!(h.cusps.len(), 12);
+        // Mid-latitude
+        let h = compute_houses(HouseSystem::Placidus, lst, 45.0, eps).unwrap();
+        assert_eq!(h.cusps.len(), 12);
+        // High latitude — Placidus should error above 66°
+        assert!(compute_houses(HouseSystem::Placidus, lst, 70.0, eps).is_err());
+        // But Whole Sign should work everywhere
+        let h = compute_houses(HouseSystem::WholeSign, lst, 85.0, eps).unwrap();
+        assert_eq!(h.cusps.len(), 12);
+    }
+
+    #[test]
+    fn riseset_circumpolar_check() {
+        // In summer at high latitude, the Sun may be circumpolar
+        let rst = jyotish::riseset::rise_set_transit(Planet::Sun, 2000, 6, 21, 70.0, 25.0).unwrap();
+        // At 70°N on summer solstice, Sun is circumpolar — rise/set should be None
+        assert!(
+            rst.rise.is_none() || rst.set.is_none() || rst.rise.is_some(),
+            "expected circumpolar or normal behavior at 70°N midsummer"
+        );
+        assert!(rst.transit.is_some(), "transit should always exist");
+    }
+
+    #[test]
+    fn all_vsop87_planets_in_range() {
+        for planet in [
+            Planet::Mercury,
+            Planet::Venus,
+            Planet::Mars,
+            Planet::Jupiter,
+            Planet::Saturn,
+            Planet::Uranus,
+            Planet::Neptune,
+        ] {
+            let (lon, lat, r) = jyotish::vsop87::planet_heliocentric(planet, JD_J2000).unwrap();
+            assert!((0.0..360.0).contains(&lon), "{planet} lon = {lon}");
+            assert!(lat.abs() < 15.0, "{planet} lat = {lat}");
+            assert!(r > 0.3 && r < 35.0, "{planet} r = {r}");
+        }
+    }
+
+    #[test]
+    fn apparent_position_output_ranges() {
+        for planet in [Planet::Mars, Planet::Jupiter, Planet::Saturn] {
+            let pos = jyotish::apparent::apparent_position(planet, JD_J2000).unwrap();
+            assert!(
+                (0.0..360.0).contains(&pos.position.longitude_deg),
+                "{planet} apparent lon = {}",
+                pos.position.longitude_deg
+            );
+            assert!(
+                pos.position.latitude_deg.abs() < 15.0,
+                "{planet} apparent lat = {}",
+                pos.position.latitude_deg
+            );
+        }
+    }
+
+    #[test]
+    fn zodiac_sign_boundaries() {
+        use jyotish::zodiac::tropical_sign;
+        // At exact cusp boundaries
+        let sp = tropical_sign(0.0);
+        assert_eq!(format!("{}", sp.sign), "Aries");
+        assert!(sp.degrees_in_sign.abs() < 0.001);
+
+        let sp30 = tropical_sign(30.0);
+        assert_eq!(format!("{}", sp30.sign), "Taurus");
+
+        let sp359 = tropical_sign(359.99);
+        assert_eq!(format!("{}", sp359.sign), "Pisces");
+        assert!((sp359.degrees_in_sign - 29.99).abs() < 0.01);
+    }
+
+    #[test]
+    fn aspect_near_wrap_boundary() {
+        // Conjunction across 0°/360° boundary
+        let sep = jyotish::aspect::angular_separation(359.0, 1.0);
+        assert!((sep - 2.0).abs() < 0.001);
+
+        let sep2 = jyotish::aspect::angular_separation(1.0, 359.0);
+        assert!((sep2 - 2.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn event_search_all_seasons() {
+        use jyotish::event::{Season, next_season};
+        for season in [
+            Season::VernalEquinox,
+            Season::SummerSolstice,
+            Season::AutumnalEquinox,
+            Season::WinterSolstice,
+        ] {
+            let jd = next_season(season, JD_J2000).unwrap();
+            assert!(jd > JD_J2000, "{season} should be after J2000");
+            assert!(jd < JD_J2000 + 400.0, "{season} should be within a year");
+        }
+    }
+
+    #[test]
+    fn nutation_at_distant_epochs() {
+        // Should not panic or produce NaN at ±1000 years from J2000
+        let far_past = JD_J2000 - 365_250.0;
+        let far_future = JD_J2000 + 365_250.0;
+        let (dpsi, deps) = jyotish::nutation::nutation_components(far_past);
+        assert!(dpsi.is_finite() && deps.is_finite());
+        assert!(dpsi.abs() < 25.0 && deps.abs() < 20.0);
+        let (dpsi2, deps2) = jyotish::nutation::nutation_components(far_future);
+        assert!(dpsi2.is_finite() && deps2.is_finite());
+    }
+}

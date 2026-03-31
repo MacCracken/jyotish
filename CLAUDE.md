@@ -39,30 +39,8 @@ hoosh (celestial context), agnosai (astronomical reasoning), joshua (game world 
 7. Deeper tests/benchmarks from audit observations
 8. Run benchmarks again — prove the wins
 
-## Architecture
+## Documentation
 
-- `src/error.rs` — `JyotishError` enum with `thiserror`
-- `src/num.rs` — Kahan compensated summation and numerical utilities
-- `src/delta_t.rs` — Delta T (TT−UT1) via Espenak & Meeus polynomials, time scale conversions
-- `src/planet.rs` — `Planet` enum, `PlanetaryPosition` struct
-- `src/calendar.rs` — Julian/Gregorian/sidereal time/JDN conversions
-- `src/coords.rs` — degree/radian conversion, ecliptic↔equatorial, mean obliquity
-- `src/sun.rs` — solar longitude, distance, equation of time (Meeus Ch. 25)
-- `src/moon.rs` — lunar longitude, latitude, distance (Meeus Ch. 47, 60 periodic terms)
-- `src/planetary.rs` — Mercury–Pluto geocentric positions (Keplerian + Kepler solver)
-- `src/nutation.rs` — IAU 1980 nutation (63 terms), precession, true obliquity
-- `src/event.rs` — equinox/solstice search, conjunction/opposition detection
-- `src/zodiac.rs` — tropical/sidereal zodiac, Lahiri ayanamsa, signs, elements, modalities
-- `src/house.rs` — Placidus, Equal, Whole Sign, Porphyry house systems
-- `src/aspect.rs` — conjunction, opposition, trine, square, sextile with configurable orbs
-- `src/transit.rs` — daily motion, ingress, retrograde station detection
-- `src/riseset.rs` — rise/set/transit times (Meeus Ch. 15 with interpolation)
-- `src/parallax.rs` — topocentric lunar parallax, horizontal parallax, Observer struct
-- `src/orbital.rs` — falak integration: enhanced Kepler solver, state vectors (feature-gated)
-- `src/logging.rs` — tracing-subscriber init (feature-gated)
-
-## Dependencies
-
-- **hisab** — trigonometry, linear algebra, numerical methods
-- **chrono** — date/time handling
-- **falak** (optional, `orbital` feature) — orbital mechanics
+- Architecture and module map: `docs/architecture/modules.md`
+- Roadmap: `docs/roadmap.md`
+- Changelog: `CHANGELOG.md`

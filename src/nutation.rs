@@ -39,31 +39,31 @@ const AS2R: f64 = std::f64::consts::PI / (180.0 * 3600.0);
 fn el(t: f64) -> f64 {
     // 485868.249036″ + 1717915923.2178″·T, mod 1296000″, → radians
     let a = 485_868.249_036 + 1_717_915_923.217_8 * t;
-    (a % TURNAS) * AS2R
+    a.rem_euclid(TURNAS) * AS2R
 }
 
 /// Mean anomaly of the Sun (l').
 fn elp(t: f64) -> f64 {
     let a = 1_287_104.793_05 + 129_596_581.048_1 * t;
-    (a % TURNAS) * AS2R
+    a.rem_euclid(TURNAS) * AS2R
 }
 
 /// Mean argument of the latitude of the Moon (F).
 fn f_arg(t: f64) -> f64 {
     let a = 335_779.526_232 + 1_739_527_262.847_8 * t;
-    (a % TURNAS) * AS2R
+    a.rem_euclid(TURNAS) * AS2R
 }
 
 /// Mean elongation of the Moon from the Sun (D).
 fn d_arg(t: f64) -> f64 {
     let a = 1_072_260.703_69 + 1_602_961_601.209_0 * t;
-    (a % TURNAS) * AS2R
+    a.rem_euclid(TURNAS) * AS2R
 }
 
 /// Longitude of the ascending node of the Moon's mean orbit (Ω).
 fn om(t: f64) -> f64 {
     let a = 450_160.398_036 - 6_962_890.543_1 * t;
-    (a % TURNAS) * AS2R
+    a.rem_euclid(TURNAS) * AS2R
 }
 
 // ---------------------------------------------------------------------------
@@ -282,8 +282,7 @@ pub fn precession_longitude(t: f64) -> f64 {
     let t3 = t2 * t;
     let t4 = t3 * t;
     let t5 = t4 * t;
-    (5_038.481_507 * t - 1.079_006_9 * t2 - 0.001_140_45 * t3
-        + 0.000_132_851 * t4
+    (5_038.481_507 * t - 1.079_006_9 * t2 - 0.001_140_45 * t3 + 0.000_132_851 * t4
         - 0.000_000_095_1 * t5)
         / 3600.0
 }
@@ -324,10 +323,9 @@ pub fn precession_equatorial(t: f64) -> (f64, f64, f64) {
         - 2.904e-7 * t5)
         / 3600.0;
 
-    let theta_a = (2_004.191_903 * t - 0.429_493_4 * t2 - 0.041_822_64 * t3
-        - 7.089e-6 * t4
-        - 1.274e-7 * t5)
-        / 3600.0;
+    let theta_a =
+        (2_004.191_903 * t - 0.429_493_4 * t2 - 0.041_822_64 * t3 - 7.089e-6 * t4 - 1.274e-7 * t5)
+            / 3600.0;
 
     (zeta_a, z_a, theta_a)
 }
@@ -354,16 +352,14 @@ pub fn precession_ecliptic(t: f64) -> (f64, f64) {
     let t5 = t4 * t;
 
     // π_A (inclination of ecliptic on fixed ecliptic) in arcseconds
-    let pi_a = (47.003_18 * t - 0.066_03 * t2 + 0.000_598_* t3
-        - 0.000_003_50 * t4
+    let pi_a = (47.003_18 * t - 0.066_03 * t2 + 0.000_598_ * t3 - 0.000_003_50 * t4
         + 0.000_000_032 * t5)
         / 3600.0;
 
     // Π_A (longitude of ascending node of moving ecliptic) in arcseconds
     // Note: Π_A has a large constant offset (174°52'34.982") plus secular terms
     let big_pi_a = 174.876_383_89
-        + (-869.821_8 * t + 0.030_00 * t2 + 0.018_31 * t3 - 0.000_012_0 * t4
-            - 0.000_000_11 * t5)
+        + (-869.821_8 * t + 0.030_00 * t2 + 0.018_31 * t3 - 0.000_012_0 * t4 - 0.000_000_11 * t5)
             / 3600.0;
 
     (pi_a, big_pi_a)
@@ -415,8 +411,7 @@ pub fn annual_precession_rate(jd: f64) -> f64 {
     let t2 = t * t;
     let t3 = t2 * t;
     let t4 = t3 * t;
-    (5_038.481_507 - 2.0 * 1.079_006_9 * t - 3.0 * 0.001_140_45 * t2
-        + 4.0 * 0.000_132_851 * t3
+    (5_038.481_507 - 2.0 * 1.079_006_9 * t - 3.0 * 0.001_140_45 * t2 + 4.0 * 0.000_132_851 * t3
         - 5.0 * 0.000_000_095_1 * t4)
         / 3600.0
         / 100.0

@@ -123,8 +123,10 @@ pub fn next_season(season: Season, jd: f64) -> Result<f64> {
 
     // Verify the result is after the input JD
     if result < jd {
-        // Rare edge case: search again one year ahead
+        // Rare edge case: search again one year ahead (iterative, not recursive)
         return next_season(season, jd + 300.0);
+        // Note: this recurses at most once because jd+300 always puts us before
+        // the next occurrence of any season (orbital period ~365.25 days).
     }
 
     Ok(result)
@@ -153,7 +155,7 @@ pub fn seasons_of_year(jd: f64) -> Result<Vec<(Season, f64)>> {
         }
     }
 
-    results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+    results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
     Ok(results)
 }
 

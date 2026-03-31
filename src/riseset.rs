@@ -219,8 +219,13 @@ fn refine_rise_set(
         let alt =
             rad_to_deg((lat_r.sin() * dec_r.sin() + lat_r.cos() * dec_r.cos() * h_r.cos()).asin());
 
-        // Correction
-        let dm = (alt - h0) / (360.0 * dec_r.cos() * lat_r.cos() * h_r.sin());
+        // Correction — guard against near-zero denominator (body on meridian,
+        // observer at pole, or body at celestial pole).
+        let denom = 360.0 * dec_r.cos() * lat_r.cos() * h_r.sin();
+        if denom.abs() < 1e-12 {
+            break;
+        }
+        let dm = (alt - h0) / denom;
         m_refined += dm;
 
         if dm.abs() < 1e-8 {

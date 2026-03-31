@@ -56,6 +56,12 @@ pub mod aberration;
 /// Apparent position pipeline (geometric → aberration → nutation → apparent).
 pub mod apparent;
 
+/// Lunar phase computation — New Moon, First Quarter, Full Moon, Last Quarter.
+pub mod phase;
+
+/// Eclipse prediction — solar and lunar eclipse detection and classification.
+pub mod eclipse;
+
 /// Celestial events — eclipses, conjunctions, oppositions, transits, equinoxes, solstices.
 pub mod event;
 
@@ -76,6 +82,18 @@ pub mod riseset;
 
 /// Parallax correction for topocentric positions.
 pub mod parallax;
+
+/// Physical ephemerides — apparent diameter, phase angle, illumination, elongation.
+pub mod physical;
+
+/// Fixed star catalog — navigational stars with proper motion.
+pub mod star;
+
+/// Atmospheric refraction corrections.
+pub mod refraction;
+
+/// Planetary phenomena — elongation, opposition, conjunction, station detection.
+pub mod phenomena;
 
 #[cfg(feature = "orbital")]
 /// High-fidelity orbital mechanics via falak.

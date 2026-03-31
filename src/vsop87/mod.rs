@@ -161,10 +161,7 @@ mod tests {
         // Earth's latitude should be near 0
         assert!(lat.abs() < 0.01, "Earth lat = {lat}");
         // Earth's radius ≈ 0.9833 AU at J2000.0 (early January)
-        assert!(
-            (r - 0.983).abs() < 0.02,
-            "Earth r = {r}, expected ~0.983"
-        );
+        assert!((r - 0.983).abs() < 0.02, "Earth r = {r}, expected ~0.983");
     }
 
     #[test]
@@ -202,10 +199,7 @@ mod tests {
             Planet::Neptune,
         ] {
             let (lon, lat, r) = planet_heliocentric(planet, JD_J2000).unwrap();
-            assert!(
-                (0.0..360.0).contains(&lon),
-                "{planet} lon = {lon}"
-            );
+            assert!((0.0..360.0).contains(&lon), "{planet} lon = {lon}");
             assert!(lat.abs() < 15.0, "{planet} lat = {lat}");
             assert!(r > 0.3 && r < 35.0, "{planet} r = {r}");
         }

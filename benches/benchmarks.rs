@@ -1,5 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use jyotish::{Planet, calendar, moon, nutation, planetary, sun};
+use jyotish::{Planet, apparent, calendar, moon, nutation, planetary, sun};
 
 fn bench_planet_display(c: &mut Criterion) {
     c.bench_function("planet_display", |b| b.iter(|| Planet::Jupiter.to_string()));
@@ -66,6 +66,70 @@ fn bench_nutation(c: &mut Criterion) {
     });
 }
 
+fn bench_vsop87(c: &mut Criterion) {
+    let jd = 2_451_545.0;
+    c.bench_function("vsop87_earth", |b| {
+        b.iter(|| jyotish::vsop87::earth_heliocentric(jd))
+    });
+    c.bench_function("vsop87_jupiter", |b| {
+        b.iter(|| jyotish::vsop87::planet_heliocentric(Planet::Jupiter, jd).unwrap())
+    });
+}
+
+fn bench_apparent(c: &mut Criterion) {
+    let jd = 2_451_545.0;
+    c.bench_function("apparent_mars", |b| {
+        b.iter(|| apparent::apparent_position(Planet::Mars, jd).unwrap())
+    });
+    c.bench_function("apparent_sun", |b| b.iter(|| apparent::apparent_sun(jd)));
+    c.bench_function("apparent_moon", |b| b.iter(|| apparent::apparent_moon(jd)));
+}
+
+fn bench_aberration(c: &mut Criterion) {
+    let jd = 2_451_545.0;
+    c.bench_function("apply_aberration", |b| {
+        b.iter(|| jyotish::aberration::apply_aberration(45.0, 1.5, 280.0, 23.44))
+    });
+    c.bench_function("light_time_correction", |b| {
+        b.iter(|| {
+            jyotish::aberration::light_time_correction(
+                jd,
+                |jd_lt| {
+                    let pos = planetary::compute_position(Planet::Mars, jd_lt).unwrap();
+                    (pos.longitude_deg, pos.latitude_deg, pos.distance_au)
+                },
+                jyotish::vsop87::earth_heliocentric,
+            )
+        })
+    });
+}
+
+fn bench_houses(c: &mut Criterion) {
+    let jd = 2_451_545.0;
+    c.bench_function("placidus_houses", |b| {
+        b.iter(|| {
+            jyotish::house::compute_houses(jyotish::house::HouseSystem::Placidus, jd, 51.5, -0.1)
+        })
+    });
+    c.bench_function("whole_sign_houses", |b| {
+        b.iter(|| {
+            jyotish::house::compute_houses(jyotish::house::HouseSystem::WholeSign, jd, 51.5, -0.1)
+        })
+    });
+}
+
+fn bench_riseset(c: &mut Criterion) {
+    c.bench_function("sun_rise_set", |b| {
+        b.iter(|| jyotish::riseset::rise_set_transit(Planet::Sun, 2000, 1, 1, 51.5, -0.1))
+    });
+}
+
+fn bench_events(c: &mut Criterion) {
+    c.bench_function("next_vernal_equinox", |b| {
+        b.iter(|| jyotish::event::next_season(jyotish::event::Season::VernalEquinox, 2_451_545.0))
+    });
+}
+
 criterion_group!(
     benches,
     bench_planet_display,
@@ -75,5 +139,11 @@ criterion_group!(
     bench_moon,
     bench_planetary,
     bench_nutation,
+    bench_vsop87,
+    bench_apparent,
+    bench_aberration,
+    bench_houses,
+    bench_riseset,
+    bench_events,
 );
 criterion_main!(benches);

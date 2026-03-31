@@ -125,12 +125,19 @@ pub fn apparent_sun(jd: f64) -> TypedPosition {
 
 /// Compute the apparent ecliptic position of the Moon.
 ///
-/// The Moon is close enough that aberration is negligible (~0.7"),
-/// but nutation is applied.
+/// Applies aberration (~0.2") and nutation (~9") corrections.
 pub fn apparent_moon(jd: f64) -> TypedPosition {
-    let lon = crate::moon::lunar_longitude(jd);
-    let lat = crate::moon::lunar_latitude(jd);
+    let mut lon = crate::moon::lunar_longitude(jd);
+    let mut lat = crate::moon::lunar_latitude(jd);
     let dist = crate::moon::lunar_distance_au(jd);
+
+    // Aberration (small but non-negligible for precision work)
+    let t = julian_centuries(jd);
+    let sun_lon = crate::sun::solar_longitude(jd);
+    let eps = mean_obliquity(t);
+    let (ab_lon, ab_lat) = apply_aberration(lon, lat, sun_lon, eps);
+    lon = ab_lon;
+    lat = ab_lat;
 
     // Apply nutation to lunar longitude
     let apparent_lon = normalize_degrees(lon + nutation_longitude(jd));

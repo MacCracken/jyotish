@@ -61,8 +61,7 @@ fn pluto_heliocentric(jd: f64) -> (f64, f64, f64) {
 
     let m = deg_to_rad(normalize_degrees(l - rad_to_deg(peri)));
     let ea = solve_kepler(m, e);
-    let v = 2.0
-        * ((1.0 + e).sqrt() * (ea / 2.0).sin()).atan2((1.0 - e).sqrt() * (ea / 2.0).cos());
+    let v = 2.0 * ((1.0 + e).sqrt() * (ea / 2.0).sin()).atan2((1.0 - e).sqrt() * (ea / 2.0).cos());
     let r = a * (1.0 - e * ea.cos());
 
     let arg = v + peri - node;
@@ -73,10 +72,16 @@ fn pluto_heliocentric(jd: f64) -> (f64, f64, f64) {
 }
 
 /// Solve Kepler's equation M = E - e*sin(E) for eccentric anomaly E.
+///
+/// Uses Newton-Raphson iteration with convergence guard.
 fn solve_kepler(m_rad: f64, e: f64) -> f64 {
     let mut ea = m_rad + e * m_rad.sin();
     for _ in 0..50 {
-        let delta = (ea - e * ea.sin() - m_rad) / (1.0 - e * ea.cos());
+        let denom = 1.0 - e * ea.cos();
+        if denom.abs() < 1e-15 {
+            break;
+        }
+        let delta = (ea - e * ea.sin() - m_rad) / denom;
         ea -= delta;
         if delta.abs() < 1e-12 {
             break;
@@ -180,7 +185,10 @@ pub fn compute_position_meeus(planet: Planet, jd: f64) -> Result<PlanetaryPositi
     let (geo_lon, geo_lat, geo_dist) =
         heliocentric_to_geocentric(h_lon, h_lat, h_r, e_lon, 0.0, e_r);
     Ok(PlanetaryPosition::new(
-        planet, geo_lon, geo_lat, geo_dist,
+        planet,
+        geo_lon,
+        geo_lat,
+        geo_dist,
         crate::calendar::jd_to_unix(jd),
     ))
 }
@@ -194,8 +202,7 @@ fn earth_heliocentric_keplerian(jd: f64) -> (f64, f64, f64) {
     let peri = deg_to_rad(102.937_35 + 1.719_526_9 * t);
     let m = deg_to_rad(normalize_degrees(l - rad_to_deg(peri)));
     let ea = solve_kepler(m, e);
-    let v = 2.0
-        * ((1.0 + e).sqrt() * (ea / 2.0).sin()).atan2((1.0 - e).sqrt() * (ea / 2.0).cos());
+    let v = 2.0 * ((1.0 + e).sqrt() * (ea / 2.0).sin()).atan2((1.0 - e).sqrt() * (ea / 2.0).cos());
     let r = a * (1.0 - e * ea.cos());
     let lon = v + peri;
     (normalize_degrees(rad_to_deg(lon)), 0.0, r)
@@ -215,48 +222,72 @@ struct OrbitalElements {
 fn orbital_elements_meeus(planet: Planet) -> Result<OrbitalElements> {
     match planet {
         Planet::Mercury => Ok(OrbitalElements {
-            l: (252.250_32, 149_472.674_11), a: (0.387_098_93, 0.0),
-            e: (0.205_631_75, 0.000_020_406), i: (7.004_986, 0.001_821_5),
-            node: (48.330_893, 1.186_124_4), peri: (77.456_45, 1.556_511_1),
+            l: (252.250_32, 149_472.674_11),
+            a: (0.387_098_93, 0.0),
+            e: (0.205_631_75, 0.000_020_406),
+            i: (7.004_986, 0.001_821_5),
+            node: (48.330_893, 1.186_124_4),
+            peri: (77.456_45, 1.556_511_1),
         }),
         Planet::Venus => Ok(OrbitalElements {
-            l: (181.979_73, 58_517.815_39), a: (0.723_331_99, 0.0),
-            e: (0.006_773_23, -0.000_047_766), i: (3.394_662, 0.001_003_7),
-            node: (76.679_920, 0.901_120_6), peri: (131.563_70, 1.402_123_9),
+            l: (181.979_73, 58_517.815_39),
+            a: (0.723_331_99, 0.0),
+            e: (0.006_773_23, -0.000_047_766),
+            i: (3.394_662, 0.001_003_7),
+            node: (76.679_920, 0.901_120_6),
+            peri: (131.563_70, 1.402_123_9),
         }),
         Planet::Mars => Ok(OrbitalElements {
-            l: (355.433_30, 19_140.299_34), a: (1.523_662_31, 0.000_001_97),
-            e: (0.093_412_33, 0.000_090_48), i: (1.849_726, -0.000_601_1),
-            node: (49.558_093, 0.772_095_9), peri: (336.060_23, 1.840_758_4),
+            l: (355.433_30, 19_140.299_34),
+            a: (1.523_662_31, 0.000_001_97),
+            e: (0.093_412_33, 0.000_090_48),
+            i: (1.849_726, -0.000_601_1),
+            node: (49.558_093, 0.772_095_9),
+            peri: (336.060_23, 1.840_758_4),
         }),
         Planet::Jupiter => Ok(OrbitalElements {
-            l: (34.351_48, 3_034.905_67), a: (5.202_603_2, 0.000_019_13),
-            e: (0.048_497_65, 0.000_163_14), i: (1.303_270, -0.001_987_2),
-            node: (100.464_44, 0.176_450_5), peri: (14.331_09, 0.215_520_9),
+            l: (34.351_48, 3_034.905_67),
+            a: (5.202_603_2, 0.000_019_13),
+            e: (0.048_497_65, 0.000_163_14),
+            i: (1.303_270, -0.001_987_2),
+            node: (100.464_44, 0.176_450_5),
+            peri: (14.331_09, 0.215_520_9),
         }),
         Planet::Saturn => Ok(OrbitalElements {
-            l: (50.077_44, 1_222.113_79), a: (9.554_909_6, -0.000_021_39),
-            e: (0.055_508_62, -0.000_346_64), i: (2.488_878, 0.002_551_5),
-            node: (113.665_24, 0.877_191_6), peri: (93.056_78, 0.565_320_6),
+            l: (50.077_44, 1_222.113_79),
+            a: (9.554_909_6, -0.000_021_39),
+            e: (0.055_508_62, -0.000_346_64),
+            i: (2.488_878, 0.002_551_5),
+            node: (113.665_24, 0.877_191_6),
+            peri: (93.056_78, 0.565_320_6),
         }),
         Planet::Uranus => Ok(OrbitalElements {
-            l: (314.055_01, 428.466_77), a: (19.218_143_4, -0.000_003_72),
-            e: (0.046_295_11, -0.000_027_29), i: (0.773_196, 0.000_673_9),
-            node: (74.005_947, 0.074_146_1), peri: (173.005_56, 0.089_321_2),
+            l: (314.055_01, 428.466_77),
+            a: (19.218_143_4, -0.000_003_72),
+            e: (0.046_295_11, -0.000_027_29),
+            i: (0.773_196, 0.000_673_9),
+            node: (74.005_947, 0.074_146_1),
+            peri: (173.005_56, 0.089_321_2),
         }),
         Planet::Neptune => Ok(OrbitalElements {
-            l: (304.348_67, 218.486_28), a: (30.110_386_9, 0.000_012_63),
-            e: (0.008_994_83, 0.000_006_91), i: (1.769_952, -0.009_308_2),
-            node: (131.784_06, 1.010_304_4), peri: (48.123_69, 0.029_158_7),
+            l: (304.348_67, 218.486_28),
+            a: (30.110_386_9, 0.000_012_63),
+            e: (0.008_994_83, 0.000_006_91),
+            i: (1.769_952, -0.009_308_2),
+            node: (131.784_06, 1.010_304_4),
+            peri: (48.123_69, 0.029_158_7),
         }),
         Planet::Pluto => Ok(OrbitalElements {
-            l: (238.928_81, 145.205_26), a: (39.481_686_77, 0.0),
-            e: (0.248_808_6, 0.000_060_16), i: (17.141_75, 0.003_075),
-            node: (110.303_47, -0.010_139_6), peri: (224.066_76, -0.003_442_5),
+            l: (238.928_81, 145.205_26),
+            a: (39.481_686_77, 0.0),
+            e: (0.248_808_6, 0.000_060_16),
+            i: (17.141_75, 0.003_075),
+            node: (110.303_47, -0.010_139_6),
+            peri: (224.066_76, -0.003_442_5),
         }),
-        Planet::Sun | Planet::Moon => Err(JyotishError::InvalidParameter(
-            "use sun/moon module".into(),
-        )),
+        Planet::Sun | Planet::Moon => {
+            Err(JyotishError::InvalidParameter("use sun/moon module".into()))
+        }
     }
 }
 
@@ -272,8 +303,7 @@ fn heliocentric_keplerian(planet: Planet, jd: f64) -> Result<(f64, f64, f64)> {
     let peri = deg_to_rad(elts.peri.0 + elts.peri.1 * t);
     let m = deg_to_rad(normalize_degrees(l - rad_to_deg(peri)));
     let ea = solve_kepler(m, e);
-    let v = 2.0
-        * ((1.0 + e).sqrt() * (ea / 2.0).sin()).atan2((1.0 - e).sqrt() * (ea / 2.0).cos());
+    let v = 2.0 * ((1.0 + e).sqrt() * (ea / 2.0).sin()).atan2((1.0 - e).sqrt() * (ea / 2.0).cos());
     let r = a * (1.0 - e * ea.cos());
     let arg = v + peri - node;
     let lon = (arg.sin() * i.cos()).atan2(arg.cos()) + node;

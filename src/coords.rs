@@ -40,6 +40,9 @@ pub fn mean_obliquity(t: f64) -> f64 {
 ///
 /// Takes ecliptic longitude and latitude in degrees, plus the obliquity in degrees.
 /// Returns (right ascension, declination) in degrees.
+///
+/// Uses the full spherical formula (Meeus eq. 13.3–13.4) rewritten to avoid
+/// a `tan(lat)` singularity at the ecliptic poles (lat = ±90°).
 pub fn ecliptic_to_equatorial(lon_deg: f64, lat_deg: f64, obliquity_deg: f64) -> (f64, f64) {
     let lon = deg_to_rad(lon_deg);
     let lat = deg_to_rad(lat_deg);
@@ -52,7 +55,10 @@ pub fn ecliptic_to_equatorial(lon_deg: f64, lat_deg: f64, obliquity_deg: f64) ->
     let sin_eps = eps.sin();
     let cos_eps = eps.cos();
 
-    let ra = (sin_lon * cos_eps - sin_lat / cos_lat * sin_eps).atan2(cos_lon);
+    // Multiply through by cos_lat to avoid division by zero at poles:
+    //   numerator   = sin_lon·cos_eps·cos_lat − sin_lat·sin_eps
+    //   denominator = cos_lon·cos_lat
+    let ra = (sin_lon * cos_eps * cos_lat - sin_lat * sin_eps).atan2(cos_lon * cos_lat);
     let dec = (sin_lat * cos_eps + cos_lat * sin_eps * sin_lon).asin();
 
     (normalize_degrees(rad_to_deg(ra)), rad_to_deg(dec))

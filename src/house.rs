@@ -251,7 +251,10 @@ fn placidus_cusp(mc: f64, fraction: f64, lat: f64, eps: f64, below_horizon: bool
     // Iterate to convergence
     for _ in 0..50 {
         let dec = (eps.sin() * cusp.sin()).asin();
-        let ad = (lat.tan() * dec.tan()).asin();
+        let ad_arg = lat.tan() * dec.tan();
+        // Guard: if |ad_arg| >= 1 the body is circumpolar at this declination;
+        // clamp to avoid NaN from asin.
+        let ad = ad_arg.clamp(-0.999_999, 0.999_999).asin();
         let sa = PI / 2.0 + ad;
         let dsa = if below_horizon { PI - sa } else { sa };
 

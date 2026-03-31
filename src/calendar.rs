@@ -447,7 +447,7 @@ fn validate_time_parts(hour: u32, minute: u32, second: f64) -> Result<()> {
             "minute {minute} not in 0..=59"
         )));
     }
-    if !(0.0..60.0).contains(&second) {
+    if !(0.0..61.0).contains(&second) {
         return Err(JyotishError::InvalidParameter(format!(
             "second {second} not in 0.0..60.0"
         )));
@@ -652,6 +652,8 @@ mod tests {
     fn invalid_time() {
         assert!(gregorian_to_jd(2000, 1, 1, 24, 0, 0.0).is_err());
         assert!(gregorian_to_jd(2000, 1, 1, 0, 60, 0.0).is_err());
-        assert!(gregorian_to_jd(2000, 1, 1, 0, 0, 60.0).is_err());
+        // 60.0 is now valid (leap second); 61.0 is not
+        assert!(gregorian_to_jd(2000, 1, 1, 0, 0, 60.0).is_ok());
+        assert!(gregorian_to_jd(2000, 1, 1, 0, 0, 61.0).is_err());
     }
 }

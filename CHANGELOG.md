@@ -4,6 +4,28 @@ All notable changes to jyotish are documented in this file.
 
 ## [Unreleased]
 
+### Phase 4 — Feature Completeness
+
+- **eclipse** — solar/lunar eclipse prediction with classification (total, annular, partial, hybrid, penumbral), magnitude, gamma parameter
+- **phase** — lunar phase computation (New/Full/Quarter moon times), lunation numbers, phase angle, next-phase search
+- **phenomena** — planetary phenomena detection: greatest elongation, opposition, conjunction, station (retrograde/direct)
+- **star** — fixed star catalog (58 navigational stars) with J2000.0 coordinates, proper motion, magnitude; position-at-epoch, search, brightness ranking
+- **refraction** — atmospheric refraction (Bennett/Saemundsson), apparent↔true altitude conversion, pressure/temperature correction
+- **physical** — physical ephemerides: apparent angular diameter, phase angle, illuminated fraction, elongation from Sun
+
+### Audit Fixes
+
+- **coords** — rewrote `ecliptic_to_equatorial` to avoid `tan(lat)` singularity at ecliptic poles
+- **event** — fixed `partial_cmp().unwrap()` panic risk in sort; documented recursion bound
+- **riseset** — added division-by-zero guard in altitude refinement loop
+- **calendar** — allow leap seconds (second=60.0) in time validation
+- **planetary** — added convergence guard in Kepler solver for near-zero denominator
+- **apparent** — apply aberration to Moon (previously incorrectly omitted)
+- **nutation** — use `rem_euclid()` for proper modulo in Delaunay argument reduction
+- **house** — clamp `asin` argument in Placidus to prevent NaN at circumpolar declinations
+- **sun** — gate unused `equation_of_center_meeus` behind `meeus` feature to eliminate dead code warning
+- Removed orphan `src/elp2000/` directory (incomplete, never wired into crate)
+
 ### Phase 1 — Numerical Foundation
 
 - **num** — Kahan compensated summation (`KahanSum`) for all periodic term series
@@ -17,6 +39,13 @@ All notable changes to jyotish are documented in this file.
 - **riseset** — rise/set/transit times using Meeus Ch. 15 with iterative interpolation refinement
 - **parallax** — topocentric lunar parallax correction, `Observer` struct, horizontal parallax computation
 - **orbital** — falak integration (feature-gated): enhanced Kepler solver (Danby+NR), heliocentric state vectors, geocentric positions via falak's orbital mechanics
+
+### Accuracy Pipeline (Phase 2)
+
+- **aberration** — annual aberration correction (Meeus Ch. 23, ~20.5" solar correction), light-time correction
+- **nutation** — upgraded from IAU 1980 to IAU 2000B (McCarthy & Luzum 2003); 77 lunisolar terms with planetary offset corrections, ~1 mas accuracy; IAU 2006 precession (Capitaine et al. 2003); ICRS frame bias
+- **apparent** — apparent position pipeline: geometric → aberration → nutation → apparent; `PositionType`/`TypedPosition` API for geometric vs apparent coordinates
+- **vsop87** — VSOP87D heliocentric ecliptic coordinates (J2000.0) for Mercury–Neptune, per-planet data files
 
 ### Core Modules (full implementation replacing stubs)
 

@@ -116,6 +116,7 @@ fn mean_anomaly_meeus(t: f64) -> f64 {
 }
 
 /// Equation of center for the Sun (Meeus).
+#[cfg(feature = "meeus")]
 fn equation_of_center_meeus(t: f64, m_deg: f64) -> f64 {
     let m = deg_to_rad(m_deg);
     ((-0.000_014 * t - 0.004_817) * t + 1.914_602) * m.sin()
