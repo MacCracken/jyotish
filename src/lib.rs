@@ -47,6 +47,9 @@ pub mod planetary;
 /// Nutation and precession corrections.
 pub mod nutation;
 
+/// VSOP87D planetary theory — heliocentric ecliptic coordinates (J2000.0).
+pub mod vsop87;
+
 /// Annual aberration and light-time correction.
 pub mod aberration;
 

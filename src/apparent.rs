@@ -98,13 +98,27 @@ pub fn apparent_position(planet: Planet, jd: f64) -> Result<TypedPosition> {
 
 /// Compute the apparent ecliptic longitude of the Sun.
 ///
-/// The Sun's position from `sun::solar_longitude` already includes a
-/// simplified aberration + nutation correction. This function returns
-/// the same value but tagged as apparent.
+/// Applies solar aberration (−20.4898″/R) and nutation in longitude to
+/// the geometric position from VSOP87.
 pub fn apparent_sun(jd: f64) -> TypedPosition {
-    let pos = crate::sun::solar_position(jd);
+    let mut lon = crate::sun::solar_longitude(jd);
+    let lat = crate::sun::solar_latitude(jd);
+    let dist = crate::sun::solar_distance_au(jd);
+
+    // Solar aberration: −20.4898″ / R (Meeus eq. 25.10)
+    lon -= 20.4898 / (3600.0 * dist);
+
+    // Nutation in longitude
+    lon = normalize_degrees(lon + nutation_longitude(jd));
+
     TypedPosition {
-        position: pos,
+        position: PlanetaryPosition::new(
+            Planet::Sun,
+            lon,
+            lat,
+            dist,
+            crate::calendar::jd_to_unix(jd),
+        ),
         position_type: PositionType::Apparent,
     }
 }

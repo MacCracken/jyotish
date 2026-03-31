@@ -254,27 +254,38 @@ pub fn true_obliquity(jd: f64) -> f64 {
 }
 
 // ---------------------------------------------------------------------------
-// Public API — Precession
+// Public API — Precession (IAU 2006, Capitaine, Wallace & Chapront 2003)
 // ---------------------------------------------------------------------------
 
 /// General precession in longitude (ψ_A) accumulated from J2000.0.
 ///
 /// `t` is Julian centuries from J2000.0. Returns the precession in degrees.
 ///
-/// Uses the IAU 2006 precession (Lieske constants via Meeus eq. 21.3).
+/// Uses the IAU 2006 precession (Capitaine, Wallace & Chapront 2003,
+/// Hilton et al. 2006). The 5th-order polynomial provides ~0.1 mas accuracy
+/// over ±1000 years from J2000.0.
 ///
 /// # Examples
 ///
 /// ```
 /// # use jyotish::nutation::precession_longitude;
-/// // One century of precession ≈ 1.3972°
+/// // One century of precession ≈ 1.3996°
 /// let prec = precession_longitude(1.0);
-/// assert!((prec - 1.3972).abs() < 0.001, "got {prec}");
+/// assert!((prec - 1.3996).abs() < 0.001, "got {prec}");
 /// ```
 pub fn precession_longitude(t: f64) -> f64 {
-    // General precession in longitude (Meeus eq. 21.3)
-    // In arcseconds: 5029.0966" * T + 1.11113" * T² - 0.000006" * T³
-    (5_029.096_6 * t + 1.111_13 * t * t - 0.000_006 * t * t * t) / 3600.0
+    // IAU 2006 general precession in longitude (ψ_A) in arcseconds:
+    //   5038.481507*T − 1.0790069*T² − 0.00114045*T³
+    //   + 0.000132851*T⁴ − 0.0000000951*T⁵
+    // (Capitaine et al. 2003, Table 1)
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let t4 = t3 * t;
+    let t5 = t4 * t;
+    (5_038.481_507 * t - 1.079_006_9 * t2 - 0.001_140_45 * t3
+        + 0.000_132_851 * t4
+        - 0.000_000_095_1 * t5)
+        / 3600.0
 }
 
 /// Precession parameters (ζ_A, z_A, θ_A) for equatorial precession from J2000.0.
@@ -282,6 +293,9 @@ pub fn precession_longitude(t: f64) -> f64 {
 /// Returns `(zeta_a, z_a, theta_a)` in degrees. These are the three Euler angles
 /// for rotating equatorial coordinates from J2000.0 to the epoch at `t` Julian
 /// centuries from J2000.0.
+///
+/// Uses the IAU 2006 precession (Capitaine et al. 2003, Table 2). Includes the
+/// frame bias offset (±2.650545") for GCRS-to-mean-equator compatibility.
 ///
 /// # Examples
 ///
@@ -293,12 +307,88 @@ pub fn precession_longitude(t: f64) -> f64 {
 /// assert!(theta > 0.0 && theta < 1.0);
 /// ```
 pub fn precession_equatorial(t: f64) -> (f64, f64, f64) {
-    // Meeus eq. 21.2, coefficients pre-converted to degrees
-    let zeta_a = 0.640_616_1 * t + 0.000_083_9 * t * t + 0.000_005_0 * t * t * t;
-    let z_a = 0.640_616_1 * t + 0.000_304_1 * t * t + 0.000_005_1 * t * t * t;
-    let theta_a = 0.556_753_0 * t - 0.000_118_5 * t * t - 0.000_011_6 * t * t * t;
+    // IAU 2006 equatorial precession angles in arcseconds
+    // (Capitaine et al. 2003, Table 2)
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let t4 = t3 * t;
+    let t5 = t4 * t;
+
+    let zeta_a = (2.650_545 + 2_306.083_227 * t + 1.092_734_8 * t2 + 0.018_268_37 * t3
+        - 0.000_028_596 * t4
+        - 2.904e-7 * t5)
+        / 3600.0;
+
+    let z_a = (-2.650_545 + 2_306.077_181 * t + 1.092_830_3 * t2 + 0.018_268_37 * t3
+        - 0.000_028_596 * t4
+        - 2.904e-7 * t5)
+        / 3600.0;
+
+    let theta_a = (2_004.191_903 * t - 0.429_493_4 * t2 - 0.041_822_64 * t3
+        - 7.089e-6 * t4
+        - 1.274e-7 * t5)
+        / 3600.0;
 
     (zeta_a, z_a, theta_a)
+}
+
+/// Precession of the ecliptic: inclination (π_A) and longitude of the
+/// ascending node of the ecliptic on the fixed ecliptic (Π_A).
+///
+/// `t` is Julian centuries from J2000.0. Returns `(pi_a_deg, big_pi_a_deg)`.
+///
+/// Uses IAU 2006 precession (Capitaine et al. 2003, Table 1).
+///
+/// # Examples
+///
+/// ```
+/// # use jyotish::nutation::precession_ecliptic;
+/// let (pi_a, big_pi_a) = precession_ecliptic(1.0);
+/// assert!(pi_a.abs() < 1.0, "pi_a = {pi_a}");
+/// assert!(big_pi_a > 100.0 && big_pi_a < 200.0, "Π_A = {big_pi_a}");
+/// ```
+pub fn precession_ecliptic(t: f64) -> (f64, f64) {
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let t4 = t3 * t;
+    let t5 = t4 * t;
+
+    // π_A (inclination of ecliptic on fixed ecliptic) in arcseconds
+    let pi_a = (47.003_18 * t - 0.066_03 * t2 + 0.000_598_* t3
+        - 0.000_003_50 * t4
+        + 0.000_000_032 * t5)
+        / 3600.0;
+
+    // Π_A (longitude of ascending node of moving ecliptic) in arcseconds
+    // Note: Π_A has a large constant offset (174°52'34.982") plus secular terms
+    let big_pi_a = 174.876_383_89
+        + (-869.821_8 * t + 0.030_00 * t2 + 0.018_31 * t3 - 0.000_012_0 * t4
+            - 0.000_000_11 * t5)
+            / 3600.0;
+
+    (pi_a, big_pi_a)
+}
+
+/// ICRS-to-J2000.0 frame bias offsets.
+///
+/// Returns `(d_alpha_0, xi_0, eta_0)` in arcseconds. These are the constant
+/// rotation offsets between the ICRS and the mean J2000.0 equator and equinox
+/// (Chapront, Chapront-Touzé & Francou 2002).
+///
+/// # Examples
+///
+/// ```
+/// # use jyotish::nutation::frame_bias;
+/// let (da, xi, eta) = frame_bias();
+/// assert!((da - (-0.0146)).abs() < 0.001);
+/// assert!((xi - (-0.0167)).abs() < 0.001);
+/// assert!((eta - (-0.0068)).abs() < 0.001);
+/// ```
+pub fn frame_bias() -> (f64, f64, f64) {
+    // Chapront, Chapront-Touzé & Francou (2002)
+    // d_alpha_0: ICRS RA of the J2000.0 mean equinox
+    // xi_0, eta_0: ICRS frame bias rotations
+    (-0.014_6, -0.016_74, -0.006_8)
 }
 
 /// Precess ecliptic longitude from J2000.0 to the epoch at the given Julian Date.
@@ -321,9 +411,38 @@ pub fn deprecess_longitude(lon_epoch: f64, jd: f64) -> f64 {
 /// The precession rate is approximately 50.29" per year but varies slowly.
 pub fn annual_precession_rate(jd: f64) -> f64 {
     let t = julian_centuries(jd);
-    // Derivative of precession_longitude with respect to T, converted to per year
-    // d/dT [5029.0966*T + 1.11113*T² - 0.000006*T³] / 3600 / 100
-    (5_029.096_6 + 2.0 * 1.111_13 * t - 3.0 * 0.000_006 * t * t) / 3600.0 / 100.0
+    // Derivative of IAU 2006 ψ_A with respect to T, converted to per year (/100)
+    let t2 = t * t;
+    let t3 = t2 * t;
+    let t4 = t3 * t;
+    (5_038.481_507 - 2.0 * 1.079_006_9 * t - 3.0 * 0.001_140_45 * t2
+        + 4.0 * 0.000_132_851 * t3
+        - 5.0 * 0.000_000_095_1 * t4)
+        / 3600.0
+        / 100.0
+}
+
+// ---------------------------------------------------------------------------
+// Legacy Meeus precession (behind feature flag)
+// ---------------------------------------------------------------------------
+
+/// General precession in longitude using Meeus eq. 21.3 (Lieske constants).
+///
+/// Retained for comparison and backward compatibility.
+#[cfg(feature = "meeus")]
+pub fn precession_longitude_meeus(t: f64) -> f64 {
+    (5_029.096_6 * t + 1.111_13 * t * t - 0.000_006 * t * t * t) / 3600.0
+}
+
+/// Equatorial precession parameters using Meeus eq. 21.2.
+///
+/// Retained for comparison and backward compatibility.
+#[cfg(feature = "meeus")]
+pub fn precession_equatorial_meeus(t: f64) -> (f64, f64, f64) {
+    let zeta_a = 0.640_616_1 * t + 0.000_083_9 * t * t + 0.000_005_0 * t * t * t;
+    let z_a = 0.640_616_1 * t + 0.000_304_1 * t * t + 0.000_005_1 * t * t * t;
+    let theta_a = 0.556_753_0 * t - 0.000_118_5 * t * t - 0.000_011_6 * t * t * t;
+    (zeta_a, z_a, theta_a)
 }
 
 #[cfg(test)]
@@ -372,8 +491,8 @@ mod tests {
     #[test]
     fn precession_one_century() {
         let prec = precession_longitude(1.0);
-        // ~1.3972° per century
-        assert!((prec - 1.3972).abs() < 0.001, "got {prec}");
+        // IAU 2006: 5038.481507"/century = 1.39958° per century
+        assert!((prec - 1.399_578).abs() < 0.001, "got {prec}");
     }
 
     #[test]
@@ -403,8 +522,25 @@ mod tests {
     #[test]
     fn annual_precession_rate_value() {
         let rate = annual_precession_rate(J2000_0);
-        // ~50.29 arcsec/year = ~0.01397°/year
-        assert!((rate - 0.013_97).abs() < 0.0001, "got {rate}");
+        // IAU 2006: 50.38"/year = ~0.013996°/year
+        assert!((rate - 0.013_996).abs() < 0.0001, "got {rate}");
+    }
+
+    #[test]
+    fn precession_ecliptic_one_century() {
+        let (pi_a, big_pi_a) = precession_ecliptic(1.0);
+        // π_A ≈ 47"/century = 0.01306°
+        assert!((pi_a - 0.013_06).abs() < 0.001, "π_A = {pi_a}");
+        // Π_A ≈ 174.63° at T=1
+        assert!(big_pi_a > 100.0 && big_pi_a < 200.0, "Π_A = {big_pi_a}");
+    }
+
+    #[test]
+    fn frame_bias_values() {
+        let (da, xi, eta) = frame_bias();
+        assert!((da - (-0.014_6)).abs() < 1e-6);
+        assert!((xi - (-0.016_74)).abs() < 1e-6);
+        assert!((eta - (-0.006_8)).abs() < 1e-6);
     }
 
     #[test]
