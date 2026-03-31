@@ -52,7 +52,7 @@ fn bench_planetary(c: &mut Criterion) {
         b.iter(|| planetary::compute_position(Planet::Mars, jd).unwrap())
     });
     c.bench_function("all_planet_positions", |b| {
-        b.iter(|| planetary::compute_all_positions(jd))
+        b.iter(|| planetary::compute_all_positions(jd).unwrap())
     });
 }
 

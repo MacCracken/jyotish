@@ -231,7 +231,7 @@ fn find_synodic_event(
 
             // Verify this is actually the correct type of event
             // (wrapping at 0°/360° can cause false positives)
-            if (sep - target_sep).abs() < 30.0 {
+            if (sep - target_sep).abs() < 10.0 {
                 return Ok(SynodicEvent {
                     body1,
                     body2,

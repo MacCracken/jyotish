@@ -253,7 +253,7 @@ fn placidus_cusp(mc: f64, fraction: f64, lat: f64, eps: f64, below_horizon: bool
         let sa = PI / 2.0 + ad;
         let dsa = if below_horizon { PI - sa } else { sa };
 
-        let new_cusp = mc_rad + (cusp - mc_rad).rem_euclid(2.0 * PI) / (2.0 * PI) * 2.0 * PI;
+        let new_cusp = mc_rad + (cusp - mc_rad).rem_euclid(2.0 * PI);
         let ra_fraction = fraction * dsa;
         let target_ra = if below_horizon {
             mc_rad + PI + ra_fraction
@@ -358,6 +358,10 @@ mod tests {
     #[test]
     fn placidus_fails_at_poles() {
         assert!(compute_houses(HouseSystem::Placidus, LST, 80.0, EPS).is_err());
+        assert!(compute_houses(HouseSystem::Placidus, LST, 66.1, EPS).is_err());
+        assert!(compute_houses(HouseSystem::Placidus, LST, -66.1, EPS).is_err());
+        // Just under the limit should succeed
+        assert!(compute_houses(HouseSystem::Placidus, LST, 65.9, EPS).is_ok());
     }
 
     #[test]

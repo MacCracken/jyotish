@@ -232,9 +232,13 @@ pub fn compute_position(planet: Planet, jd: f64) -> Result<PlanetaryPosition> {
 
 /// Compute geocentric positions of all planets (Mercury through Pluto).
 ///
-/// Convenience function that returns a `Vec` of positions. Sun and Moon are
-/// excluded — use their dedicated modules.
-pub fn compute_all_positions(jd: f64) -> Vec<PlanetaryPosition> {
+/// Convenience function that returns positions for all eight planets.
+/// Sun and Moon are excluded — use their dedicated modules.
+///
+/// # Errors
+///
+/// Returns an error if any planet's position cannot be computed.
+pub fn compute_all_positions(jd: f64) -> Result<Vec<PlanetaryPosition>> {
     let planets = [
         Planet::Mercury,
         Planet::Venus,
@@ -246,10 +250,7 @@ pub fn compute_all_positions(jd: f64) -> Vec<PlanetaryPosition> {
         Planet::Pluto,
     ];
 
-    planets
-        .iter()
-        .filter_map(|&p| compute_position(p, jd).ok())
-        .collect()
+    planets.iter().map(|&p| compute_position(p, jd)).collect()
 }
 
 #[cfg(test)]
@@ -307,12 +308,24 @@ mod tests {
 
     #[test]
     fn compute_all_planets() {
-        let positions = compute_all_positions(JD_J2000);
+        let positions = compute_all_positions(JD_J2000).unwrap();
         assert_eq!(positions.len(), 8);
         for pos in &positions {
             assert!(pos.longitude_deg >= 0.0 && pos.longitude_deg < 360.0);
             assert!(pos.distance_au > 0.0);
         }
+    }
+
+    #[test]
+    fn compute_pluto_high_eccentricity() {
+        let pos = compute_position(Planet::Pluto, JD_J2000).unwrap();
+        assert!(pos.longitude_deg >= 0.0 && pos.longitude_deg < 360.0);
+        // Pluto distance from Earth: ~28-50 AU
+        assert!(
+            pos.distance_au > 25.0 && pos.distance_au < 55.0,
+            "Pluto distance = {} AU",
+            pos.distance_au
+        );
     }
 
     #[test]

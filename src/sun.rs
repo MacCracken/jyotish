@@ -88,12 +88,9 @@ pub fn solar_distance_au(jd: f64) -> f64 {
 
 /// Compute the Sun's ecliptic latitude in degrees.
 ///
-/// The Sun's geocentric latitude is always very close to zero (< 1.2 arcseconds),
-/// but we include the small correction for completeness.
-pub fn solar_latitude(jd: f64) -> f64 {
-    // The Sun's ecliptic latitude is essentially zero in this low-precision model.
-    // A more precise model would include small perturbations (~1 arcsec).
-    let _ = jd;
+/// Returns 0.0 — the Sun's geocentric ecliptic latitude is always within
+/// ~1.2 arcseconds of zero, below this model's precision threshold.
+pub fn solar_latitude(_jd: f64) -> f64 {
     0.0
 }
 
