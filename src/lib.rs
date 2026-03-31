@@ -56,6 +56,16 @@ pub mod aspect;
 /// Planetary transits — ingress, retrograde, station, direct motion.
 pub mod transit;
 
+/// Rise, set, and meridian transit times.
+pub mod riseset;
+
+/// Parallax correction for topocentric positions.
+pub mod parallax;
+
+#[cfg(feature = "orbital")]
+/// High-fidelity orbital mechanics via falak.
+pub mod orbital;
+
 #[cfg(feature = "logging")]
 /// Logging initialization for the jyotish crate.
 pub mod logging;
