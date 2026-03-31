@@ -10,6 +10,10 @@
 //! to compensate for omitted long-period planetary nutation terms.
 //!
 //! Also provides IAU precession formulae for converting between epochs.
+//!
+//! **Note**: Results differ from the older IAU 1980 model used in Meeus's
+//! *Astronomical Algorithms* by up to ~0.5 arcseconds. IAU 2000B is the
+//! current IAU standard and should be preferred for all new work.
 
 use crate::calendar::julian_centuries;
 use crate::num::KahanSum;

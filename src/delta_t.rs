@@ -114,16 +114,18 @@ pub fn delta_t_jd(jd: f64) -> f64 {
     delta_t(year)
 }
 
-/// Convert a Julian Date to a Terrestrial Time Julian Date using Delta T.
+/// Convert a UT1 Julian Date to TT using Delta T.
 ///
-/// If the input is UT1, this returns TT = UT1 + ΔT.
+/// Returns TT = UT1 + ΔT. Note: roundtrip conversion (UT1→TT→UT1) has
+/// sub-microsecond error due to the polynomial fit evaluating at slightly
+/// different JD values.
 pub fn ut1_to_tt(jd_ut1: f64) -> f64 {
     jd_ut1 + delta_t_jd(jd_ut1) / 86_400.0
 }
 
-/// Convert a Terrestrial Time Julian Date to UT1 using Delta T.
+/// Convert a TT Julian Date to UT1 using Delta T.
 ///
-/// Returns UT1 = TT − ΔT.
+/// Returns UT1 = TT − ΔT. See [`ut1_to_tt`] for roundtrip accuracy note.
 pub fn tt_to_ut1(jd_tt: f64) -> f64 {
     jd_tt - delta_t_jd(jd_tt) / 86_400.0
 }

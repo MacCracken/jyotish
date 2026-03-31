@@ -2,6 +2,10 @@
 //!
 //! Provides search functions for major astronomical events. Uses bisection
 //! on the position functions to locate event times to high precision.
+//!
+//! Event searches use geometric positions internally. For equinox/solstice
+//! timing, the Sun's simplified aberration+nutation correction (Meeus Ch. 25)
+//! is included, giving ~20 second accuracy for modern epochs.
 
 use crate::coords::normalize_degrees;
 use crate::error::{JyotishError, Result};

@@ -221,6 +221,9 @@ fn e_power(e: f64, m_mult: i32) -> f64 {
 
 /// Compute the Moon's ecliptic longitude in degrees for a given Julian Date.
 ///
+/// `jd` should be in TT (Terrestrial Time) or TDB. Returns a geometric
+/// position. For the full apparent position, use [`crate::apparent::apparent_moon`].
+///
 /// # Examples
 ///
 /// ```
@@ -254,7 +257,7 @@ pub fn lunar_longitude(jd: f64) -> f64 {
     normalize_degrees(lp + sigma_l.sum() / 1_000_000.0)
 }
 
-/// Compute the Moon's ecliptic latitude in degrees for a given Julian Date.
+/// Compute the Moon's ecliptic latitude in degrees for a given Julian Date (TT/TDB).
 ///
 /// # Examples
 ///
@@ -294,7 +297,7 @@ pub fn lunar_latitude(jd: f64) -> f64 {
     sigma_b.sum() / 1_000_000.0
 }
 
-/// Compute the Moon's distance from Earth in kilometers for a given Julian Date.
+/// Compute the Moon's distance from Earth in kilometers for a given Julian Date (TT/TDB).
 ///
 /// # Examples
 ///
@@ -321,7 +324,7 @@ pub fn lunar_distance_km(jd: f64) -> f64 {
     385_000.56 + sigma_r.sum() / 1000.0
 }
 
-/// Compute the Moon's distance from Earth in AU for a given Julian Date.
+/// Compute the Moon's distance from Earth in AU for a given Julian Date (TT/TDB).
 pub fn lunar_distance_au(jd: f64) -> f64 {
     lunar_distance_km(jd) / 149_597_870.7
 }

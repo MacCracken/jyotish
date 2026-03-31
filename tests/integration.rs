@@ -101,3 +101,71 @@ fn calendar_jdn_roundtrip_wide_range() {
         }
     }
 }
+
+// --- Apparent position pipeline integration tests ---
+
+mod apparent_pipeline {
+    use jyotish::{Planet, PositionType, apparent, delta_t};
+
+    const JD_TT: f64 = 2_451_545.0; // J2000.0
+
+    #[test]
+    fn apparent_vs_geometric_differs_for_planets() {
+        for planet in [Planet::Mars, Planet::Jupiter, Planet::Saturn] {
+            let geo = apparent::geometric_position(planet, JD_TT).unwrap();
+            let app = apparent::apparent_position(planet, JD_TT).unwrap();
+
+            assert_eq!(geo.position_type, PositionType::Geometric);
+            assert_eq!(app.position_type, PositionType::Apparent);
+
+            let diff = (geo.position.longitude_deg - app.position.longitude_deg).abs();
+            let diff = if diff > 180.0 { 360.0 - diff } else { diff };
+            // Aberration (~0.006°) + nutation (~0.005°) = ~0.001-0.02°
+            assert!(
+                diff > 0.0001 && diff < 0.05,
+                "{planet}: apparent-geometric diff = {diff}°"
+            );
+        }
+    }
+
+    #[test]
+    fn apparent_sun_is_tagged() {
+        let pos = apparent::apparent_sun(JD_TT);
+        assert_eq!(pos.position_type, PositionType::Apparent);
+        assert_eq!(pos.position.planet, Planet::Sun);
+    }
+
+    #[test]
+    fn apparent_moon_has_nutation() {
+        let geo_lon = jyotish::moon::lunar_longitude(JD_TT);
+        let app = apparent::apparent_moon(JD_TT);
+        let diff = (app.position.longitude_deg - geo_lon).abs();
+        // Nutation in longitude is ~0.001-0.005°
+        assert!(diff > 0.0001 && diff < 0.02, "moon nutation diff = {diff}°");
+    }
+
+    #[test]
+    fn delta_t_roundtrip_stability() {
+        // 10 roundtrips should not accumulate error
+        let mut jd = JD_TT;
+        for _ in 0..10 {
+            jd = delta_t::ut1_to_tt(delta_t::tt_to_ut1(jd));
+        }
+        assert!(
+            (jd - JD_TT).abs() < 1e-6,
+            "10-cycle roundtrip drift = {} days",
+            (jd - JD_TT).abs()
+        );
+    }
+
+    #[test]
+    fn full_pipeline_lunar_parallax() {
+        // Full chain: TT → lunar position → sidereal time → topocentric
+        let observer = jyotish::parallax::Observer::new(51.5, -0.1, 0.0);
+        let corrected = jyotish::parallax::correct_lunar_position(JD_TT, &observer).unwrap();
+        let geo_lon = jyotish::moon::lunar_longitude(JD_TT);
+        // Parallax correction should shift position noticeably
+        let diff = (corrected.longitude_deg - geo_lon).abs();
+        assert!(diff > 0.01 && diff < 2.0, "parallax shift = {diff}°");
+    }
+}

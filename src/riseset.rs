@@ -5,6 +5,11 @@
 //! Algorithms*, Chapter 15) with iterative refinement.
 //!
 //! All times are returned as Julian Dates in UT.
+//!
+//! Positions used internally are geometric (not apparent). The atmospheric
+//! refraction correction at the horizon (~34') dominates over aberration
+//! (~20") and nutation (~9"), so this is standard practice for rise/set
+//! computation.
 
 use crate::calendar::{gmst_degrees, gregorian_to_jd};
 use crate::coords::{deg_to_rad, mean_obliquity, normalize_degrees, rad_to_deg};

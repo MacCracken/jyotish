@@ -83,6 +83,9 @@ pub mod orbital;
 pub mod logging;
 
 // --- Core re-exports ---
+pub use apparent::{
+    PositionType, TypedPosition, apparent_moon, apparent_position, apparent_sun, geometric_position,
+};
 pub use calendar::{
     DAYS_PER_JULIAN_CENTURY, J2000_0, JD_UNIX_EPOCH, day_of_week, gmst_degrees, gmst_degrees_tt,
     gmst_hours, gregorian_to_jd, gregorian_to_jdn, is_gregorian_leap_year, is_julian_leap_year,
