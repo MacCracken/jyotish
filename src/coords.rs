@@ -32,7 +32,8 @@ pub fn normalize_radians(rad: f64) -> f64 {
 /// `t` is Julian centuries from J2000.0.
 /// Returns the obliquity in degrees.
 pub fn mean_obliquity(t: f64) -> f64 {
-    23.439_291_11 - 0.013_004_167 * t - 1.638_89e-7 * t * t + 5.036_11e-7 * t * t * t
+    // Horner's method: ((c3*t + c2)*t + c1)*t + c0
+    ((5.036_11e-7 * t - 1.638_89e-7) * t - 0.013_004_167) * t + 23.439_291_11
 }
 
 /// Convert ecliptic coordinates to equatorial coordinates.

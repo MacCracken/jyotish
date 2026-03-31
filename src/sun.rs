@@ -12,14 +12,14 @@ use crate::planet::{Planet, PlanetaryPosition};
 ///
 /// `t` is Julian centuries from J2000.0. Returns degrees.
 fn mean_longitude(t: f64) -> f64 {
-    normalize_degrees(280.466_46 + 36_000.769_83 * t + 0.000_303_2 * t * t)
+    normalize_degrees((0.000_303_2 * t + 36_000.769_83) * t + 280.466_46)
 }
 
 /// Mean anomaly of the Sun (Meeus eq. 25.3).
 ///
 /// `t` is Julian centuries from J2000.0. Returns degrees.
 fn mean_anomaly(t: f64) -> f64 {
-    normalize_degrees(357.529_11 + 35_999.050_29 * t - 0.000_153_7 * t * t)
+    normalize_degrees((-0.000_153_7 * t + 35_999.050_29) * t + 357.529_11)
 }
 
 /// Equation of center for the Sun.
@@ -28,8 +28,8 @@ fn mean_anomaly(t: f64) -> f64 {
 fn equation_of_center(t: f64, m_deg: f64) -> f64 {
     let m = deg_to_rad(m_deg);
 
-    (1.914_602 - 0.004_817 * t - 0.000_014 * t * t) * m.sin()
-        + (0.019_993 - 0.000_101 * t) * (2.0 * m).sin()
+    ((-0.000_014 * t - 0.004_817) * t + 1.914_602) * m.sin()
+        + (-0.000_101 * t + 0.019_993) * (2.0 * m).sin()
         + 0.000_289 * (3.0 * m).sin()
 }
 
@@ -80,7 +80,7 @@ pub fn solar_distance_au(jd: f64) -> f64 {
     let t = julian_centuries(jd);
     let m = mean_anomaly(t);
     let m_rad = deg_to_rad(m);
-    let e = 0.016_708_634 - 0.000_042_037 * t - 0.000_000_126_7 * t * t;
+    let e = (-0.000_000_126_7 * t - 0.000_042_037) * t + 0.016_708_634;
     let v_rad = m_rad + deg_to_rad(equation_of_center(t, m));
 
     1.000_001_018 * (1.0 - e * e) / (1.0 + e * v_rad.cos())

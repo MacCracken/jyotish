@@ -20,6 +20,12 @@
 /// Error types for jyotish computations.
 pub mod error;
 
+/// Numerical utilities (compensated summation, etc.).
+pub mod num;
+
+/// Delta T (TT − UT1) computation and time scale conversions.
+pub mod delta_t;
+
 /// Planetary bodies and position data.
 pub mod planet;
 

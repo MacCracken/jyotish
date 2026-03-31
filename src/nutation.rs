@@ -10,6 +10,7 @@
 
 use crate::calendar::julian_centuries;
 use crate::coords::deg_to_rad;
+use crate::num::KahanSum;
 
 // ---------------------------------------------------------------------------
 // Fundamental arguments for nutation (Meeus Table 22.A)
@@ -17,27 +18,27 @@ use crate::coords::deg_to_rad;
 
 /// Longitude of the ascending node of the Moon's mean orbit on the ecliptic.
 fn omega(t: f64) -> f64 {
-    125.044_52 - 1_934.136_261 * t + 0.002_075_4 * t * t + t * t * t / 467_441.0
+    ((1.0 / 467_441.0 * t + 0.002_075_4) * t - 1_934.136_261) * t + 125.044_52
 }
 
 /// Mean elongation of the Moon from the Sun.
 fn d_arg(t: f64) -> f64 {
-    297.850_36 + 445_267.111_480 * t - 0.001_914_2 * t * t + t * t * t / 189_474.0
+    ((1.0 / 189_474.0 * t - 0.001_914_2) * t + 445_267.111_480) * t + 297.850_36
 }
 
 /// Mean anomaly of the Sun (Earth).
 fn m_sun(t: f64) -> f64 {
-    357.527_72 + 35_999.050_340 * t - 0.000_160_3 * t * t - t * t * t / 300_000.0
+    ((-1.0 / 300_000.0 * t - 0.000_160_3) * t + 35_999.050_340) * t + 357.527_72
 }
 
 /// Mean anomaly of the Moon.
 fn m_moon(t: f64) -> f64 {
-    134.962_98 + 477_198.867_398 * t + 0.008_697_2 * t * t + t * t * t / 56_250.0
+    ((1.0 / 56_250.0 * t + 0.008_697_2) * t + 477_198.867_398) * t + 134.962_98
 }
 
 /// Moon's argument of latitude.
 fn f_arg(t: f64) -> f64 {
-    93.271_91 + 483_202.017_538 * t - 0.003_682_5 * t * t + t * t * t / 327_270.0
+    ((1.0 / 327_270.0 * t - 0.003_682_5) * t + 483_202.017_538) * t + 93.271_91
 }
 
 // ---------------------------------------------------------------------------
@@ -142,8 +143,8 @@ pub fn nutation_components(jd: f64) -> (f64, f64) {
     let m_moon_r = deg_to_rad(m_moon(t));
     let f_r = deg_to_rad(f_arg(t));
 
-    let mut delta_psi: f64 = 0.0;
-    let mut delta_eps: f64 = 0.0;
+    let mut delta_psi = KahanSum::new();
+    let mut delta_eps = KahanSum::new();
 
     for &(d, ms, mm, f, om, psi_s, psi_st, eps_c, eps_ct) in NUTATION_TERMS {
         let arg = d as f64 * d_r
@@ -152,12 +153,12 @@ pub fn nutation_components(jd: f64) -> (f64, f64) {
             + f as f64 * f_r
             + om as f64 * omega_r;
 
-        delta_psi += (psi_s as f64 + psi_st as f64 * t) * arg.sin();
-        delta_eps += (eps_c as f64 + eps_ct as f64 * t) * arg.cos();
+        delta_psi.add((psi_s as f64 + psi_st as f64 * t) * arg.sin());
+        delta_eps.add((eps_c as f64 + eps_ct as f64 * t) * arg.cos());
     }
 
     // Convert from 0.0001 arcseconds to arcseconds
-    (delta_psi / 10_000.0, delta_eps / 10_000.0)
+    (delta_psi.sum() / 10_000.0, delta_eps.sum() / 10_000.0)
 }
 
 /// Nutation in longitude (Δψ) in degrees.

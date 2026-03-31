@@ -5,49 +5,54 @@
 //! 10 arcseconds accuracy in longitude and ~4 arcseconds in latitude.
 
 use crate::calendar::julian_centuries;
-use crate::coords::{deg_to_rad, normalize_degrees};
+use crate::coords::{deg_to_rad, normalize_degrees, normalize_radians};
+use crate::num::KahanSum;
 use crate::planet::{Planet, PlanetaryPosition};
 
 // ---------------------------------------------------------------------------
 // Fundamental arguments (Meeus Ch. 47)
 // ---------------------------------------------------------------------------
 
-/// Moon's mean longitude (Meeus eq. 47.1).
+/// Moon's mean longitude (Meeus eq. 47.1), Horner's method.
 fn mean_longitude(t: f64) -> f64 {
     normalize_degrees(
-        218.316_447_7 + 481_267.881_234_21 * t - 0.001_578_6 * t * t + t * t * t / 538_841.0
-            - t * t * t * t / 65_194_000.0,
+        (((-1.0 / 65_194_000.0 * t + 1.0 / 538_841.0) * t - 0.001_578_6) * t + 481_267.881_234_21)
+            * t
+            + 218.316_447_7,
     )
 }
 
-/// Moon's mean elongation (Meeus eq. 47.2).
+/// Moon's mean elongation (Meeus eq. 47.2), Horner's method.
 fn mean_elongation(t: f64) -> f64 {
     normalize_degrees(
-        297.850_192_1 + 445_267.111_403_4 * t - 0.001_881_9 * t * t + t * t * t / 545_868.0
-            - t * t * t * t / 113_065_000.0,
+        (((-1.0 / 113_065_000.0 * t + 1.0 / 545_868.0) * t - 0.001_881_9) * t + 445_267.111_403_4)
+            * t
+            + 297.850_192_1,
     )
 }
 
-/// Sun's mean anomaly (Meeus eq. 47.3).
+/// Sun's mean anomaly (Meeus eq. 47.3), Horner's method.
 fn sun_mean_anomaly(t: f64) -> f64 {
     normalize_degrees(
-        357.529_109_2 + 35_999.050_290_9 * t - 0.000_153_6 * t * t + t * t * t / 24_490_000.0,
+        ((1.0 / 24_490_000.0 * t - 0.000_153_6) * t + 35_999.050_290_9) * t + 357.529_109_2,
     )
 }
 
-/// Moon's mean anomaly (Meeus eq. 47.4).
+/// Moon's mean anomaly (Meeus eq. 47.4), Horner's method.
 fn moon_mean_anomaly(t: f64) -> f64 {
     normalize_degrees(
-        134.963_396_4 + 477_198.867_505_5 * t + 0.008_741_4 * t * t + t * t * t / 69_699.0
-            - t * t * t * t / 14_712_000.0,
+        (((-1.0 / 14_712_000.0 * t + 1.0 / 69_699.0) * t + 0.008_741_4) * t + 477_198.867_505_5)
+            * t
+            + 134.963_396_4,
     )
 }
 
-/// Moon's argument of latitude (Meeus eq. 47.5).
+/// Moon's argument of latitude (Meeus eq. 47.5), Horner's method.
 fn argument_of_latitude(t: f64) -> f64 {
     normalize_degrees(
-        93.272_095_0 + 483_202.017_523_3 * t - 0.003_653_9 * t * t - t * t * t / 3_526_000.0
-            + t * t * t * t / 863_310_000.0,
+        (((1.0 / 863_310_000.0 * t - 1.0 / 3_526_000.0) * t - 0.003_653_9) * t + 483_202.017_523_3)
+            * t
+            + 93.272_095_0,
     )
 }
 
@@ -197,7 +202,7 @@ const LATITUDE_TERMS: &[(i32, i32, i32, i32, i64)] = &[
 
 /// Earth's orbital eccentricity correction factor (Meeus eq. 47.6).
 fn eccentricity_correction(t: f64) -> f64 {
-    1.0 - 0.002_516 * t - 0.000_007_4 * t * t
+    (-0.000_007_4 * t - 0.002_516) * t + 1.0
 }
 
 /// Compute the eccentricity power for a given M multiplier.
@@ -234,19 +239,19 @@ pub fn lunar_longitude(jd: f64) -> f64 {
     let f = deg_to_rad(argument_of_latitude(t));
     let e = eccentricity_correction(t);
 
-    let mut sigma_l: f64 = 0.0;
+    let mut sigma_l = KahanSum::new();
     for &(d_m, m_m, mp_m, f_m, sin_coeff, _cos_coeff) in LONGITUDE_DISTANCE_TERMS {
         let arg = d_m as f64 * d + m_m as f64 * m + mp_m as f64 * mp + f_m as f64 * f;
-        sigma_l += sin_coeff as f64 * e_power(e, m_m) * arg.sin();
+        sigma_l.add(sin_coeff as f64 * e_power(e, m_m) * arg.sin());
     }
 
-    // Additional correction terms (Meeus)
-    let a1 = deg_to_rad(119.75 + 131.849 * t);
-    let a2 = deg_to_rad(53.09 + 479_264.290 * t);
-    sigma_l += 3958.0 * a1.sin() + 1962.0 * a2.sin() + 318.0 * deg_to_rad(lp).sin();
+    // Additional correction terms (Meeus) — normalize arguments for large t
+    let a1 = normalize_radians(deg_to_rad(119.75 + 131.849 * t));
+    let a2 = normalize_radians(deg_to_rad(53.09 + 479_264.290 * t));
+    sigma_l.add(3958.0 * a1.sin() + 1962.0 * a2.sin() + 318.0 * deg_to_rad(lp).sin());
 
     // Convert from 0.000001 degrees to degrees and add to mean longitude
-    normalize_degrees(lp + sigma_l / 1_000_000.0)
+    normalize_degrees(lp + sigma_l.sum() / 1_000_000.0)
 }
 
 /// Compute the Moon's ecliptic latitude in degrees for a given Julian Date.
@@ -267,23 +272,26 @@ pub fn lunar_latitude(jd: f64) -> f64 {
     let f = deg_to_rad(argument_of_latitude(t));
     let e = eccentricity_correction(t);
 
-    let mut sigma_b: f64 = 0.0;
+    let mut sigma_b = KahanSum::new();
     for &(d_m, m_m, mp_m, f_m, sin_coeff) in LATITUDE_TERMS {
         let arg = d_m as f64 * d + m_m as f64 * m + mp_m as f64 * mp + f_m as f64 * f;
-        sigma_b += sin_coeff as f64 * e_power(e, m_m) * arg.sin();
+        sigma_b.add(sin_coeff as f64 * e_power(e, m_m) * arg.sin());
     }
 
-    // Additional correction terms
-    let a1 = deg_to_rad(119.75 + 131.849 * t);
-    let a3 = deg_to_rad(313.45 + 481_266.484 * t);
-    sigma_b += -2235.0 * deg_to_rad(lp).sin()
-        + 382.0 * a3.sin()
-        + 175.0 * (a1 - f).sin()
-        + 175.0 * (a1 + f).sin()
-        + 127.0 * (deg_to_rad(lp) - mp).sin()
-        - 115.0 * (deg_to_rad(lp) + mp).sin();
+    // Additional correction terms — normalize arguments for large t
+    let a1 = normalize_radians(deg_to_rad(119.75 + 131.849 * t));
+    let a3 = normalize_radians(deg_to_rad(313.45 + 481_266.484 * t));
+    let lp_rad = deg_to_rad(lp);
+    sigma_b.add(
+        -2235.0 * lp_rad.sin()
+            + 382.0 * a3.sin()
+            + 175.0 * (a1 - f).sin()
+            + 175.0 * (a1 + f).sin()
+            + 127.0 * (lp_rad - mp).sin()
+            - 115.0 * (lp_rad + mp).sin(),
+    );
 
-    sigma_b / 1_000_000.0
+    sigma_b.sum() / 1_000_000.0
 }
 
 /// Compute the Moon's distance from Earth in kilometers for a given Julian Date.
@@ -303,14 +311,14 @@ pub fn lunar_distance_km(jd: f64) -> f64 {
     let f = deg_to_rad(argument_of_latitude(t));
     let e = eccentricity_correction(t);
 
-    let mut sigma_r: f64 = 0.0;
+    let mut sigma_r = KahanSum::new();
     for &(d_m, m_m, mp_m, f_m, _sin_coeff, cos_coeff) in LONGITUDE_DISTANCE_TERMS {
         let arg = d_m as f64 * d + m_m as f64 * m + mp_m as f64 * mp + f_m as f64 * f;
-        sigma_r += cos_coeff as f64 * e_power(e, m_m) * arg.cos();
+        sigma_r.add(cos_coeff as f64 * e_power(e, m_m) * arg.cos());
     }
 
     // Mean distance 385000.56 km + corrections (in 0.001 km)
-    385_000.56 + sigma_r / 1000.0
+    385_000.56 + sigma_r.sum() / 1000.0
 }
 
 /// Compute the Moon's distance from Earth in AU for a given Julian Date.

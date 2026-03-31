@@ -272,9 +272,10 @@ pub fn julian_centuries(jd: f64) -> f64 {
 pub fn gmst_degrees(jd: f64) -> f64 {
     let t = julian_centuries(jd);
 
-    // IAU 1982 formula (Meeus eq. 12.4)
-    let gmst = 280.460_618_37 + 360.985_647_366_29 * (jd - J2000_0) + 0.000_387_933 * t * t
-        - t * t * t / 38_710_000.0;
+    // IAU 1982 formula (Meeus eq. 12.4), Horner's for the T-polynomial part
+    let gmst = 280.460_618_37
+        + 360.985_647_366_29 * (jd - J2000_0)
+        + (-1.0 / 38_710_000.0 * t + 0.000_387_933) * t * t;
 
     normalize_degrees(gmst)
 }
