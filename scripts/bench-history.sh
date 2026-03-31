@@ -3,7 +3,7 @@
 set -euo pipefail
 
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
-RESULTS_DIR="benches/history"
+RESULTS_DIR="bench-history"
 mkdir -p "$RESULTS_DIR"
 
 echo "Running benchmarks at $TIMESTAMP ..."

@@ -26,6 +26,21 @@ pub mod planet;
 /// Calendar systems — Julian, Gregorian, sidereal time, Julian Day Number conversions.
 pub mod calendar;
 
+/// Coordinate systems and transformations.
+pub mod coords;
+
+/// Solar position computation.
+pub mod sun;
+
+/// Lunar position computation.
+pub mod moon;
+
+/// Planetary position computation (Mercury through Pluto).
+pub mod planetary;
+
+/// Nutation and precession corrections.
+pub mod nutation;
+
 /// Celestial events — eclipses, conjunctions, oppositions, transits, equinoxes, solstices.
 pub mod event;
 
@@ -46,5 +61,11 @@ pub mod transit;
 pub mod logging;
 
 // --- Core re-exports ---
+pub use calendar::{
+    DAYS_PER_JULIAN_CENTURY, J2000_0, JD_UNIX_EPOCH, day_of_week, gmst_degrees, gmst_hours,
+    gregorian_to_jd, gregorian_to_jdn, is_gregorian_leap_year, is_julian_leap_year,
+    jd_to_gregorian, jd_to_unix, jdn_to_gregorian, jdn_to_julian, julian_centuries, julian_to_jdn,
+    local_sidereal_time, unix_to_jd,
+};
 pub use error::{JyotishError, Result};
 pub use planet::{Planet, PlanetaryPosition};

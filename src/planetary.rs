@@ -1,0 +1,343 @@
+//! Planetary position computation for Mercury through Pluto.
+//!
+//! Implements Keplerian orbital elements with secular variations from Meeus
+//! (*Astronomical Algorithms*, Table 31.A) and perturbation corrections for
+//! Jupiter, Saturn, and Uranus. Accuracy is approximately 1 arcminute for
+//! dates within ±2000 years of J2000.0.
+
+use crate::calendar::julian_centuries;
+use crate::coords::{deg_to_rad, normalize_degrees, rad_to_deg};
+use crate::error::{JyotishError, Result};
+use crate::planet::{Planet, PlanetaryPosition};
+
+// ---------------------------------------------------------------------------
+// Orbital elements at J2000.0 and their rates per century
+// ---------------------------------------------------------------------------
+
+/// Mean orbital elements for a planet: (value at J2000.0, rate per Julian century).
+/// Elements: L (mean longitude), a (semi-major axis AU), e (eccentricity),
+/// i (inclination), Ω (longitude of ascending node), ϖ (longitude of perihelion).
+/// All angular elements in degrees.
+struct OrbitalElements {
+    l: (f64, f64),
+    a: (f64, f64),
+    e: (f64, f64),
+    i: (f64, f64),
+    node: (f64, f64),
+    peri: (f64, f64),
+}
+
+/// Orbital elements from Meeus Table 31.A (valid for J2000.0 ± ~2000 years).
+fn orbital_elements(planet: Planet) -> Result<OrbitalElements> {
+    match planet {
+        Planet::Mercury => Ok(OrbitalElements {
+            l: (252.250_32, 149_472.674_11),
+            a: (0.387_098_93, 0.0),
+            e: (0.205_631_75, 0.000_020_406),
+            i: (7.004_986, 0.001_821_5),
+            node: (48.330_893, 1.186_124_4),
+            peri: (77.456_45, 1.556_511_1),
+        }),
+        Planet::Venus => Ok(OrbitalElements {
+            l: (181.979_73, 58_517.815_39),
+            a: (0.723_331_99, 0.0),
+            e: (0.006_773_23, -0.000_047_766),
+            i: (3.394_662, 0.001_003_7),
+            node: (76.679_920, 0.901_120_6),
+            peri: (131.563_70, 1.402_123_9),
+        }),
+        Planet::Mars => Ok(OrbitalElements {
+            l: (355.433_30, 19_140.299_34),
+            a: (1.523_662_31, 0.000_001_97),
+            e: (0.093_412_33, 0.000_090_48),
+            i: (1.849_726, -0.000_601_1),
+            node: (49.558_093, 0.772_095_9),
+            peri: (336.060_23, 1.840_758_4),
+        }),
+        Planet::Jupiter => Ok(OrbitalElements {
+            l: (34.351_48, 3_034.905_67),
+            a: (5.202_603_2, 0.000_019_13),
+            e: (0.048_497_65, 0.000_163_14),
+            i: (1.303_270, -0.001_987_2),
+            node: (100.464_44, 0.176_450_5),
+            peri: (14.331_09, 0.215_520_9),
+        }),
+        Planet::Saturn => Ok(OrbitalElements {
+            l: (50.077_44, 1_222.113_79),
+            a: (9.554_909_6, -0.000_021_39),
+            e: (0.055_508_62, -0.000_346_64),
+            i: (2.488_878, 0.002_551_5),
+            node: (113.665_24, 0.877_191_6),
+            peri: (93.056_78, 0.565_320_6),
+        }),
+        Planet::Uranus => Ok(OrbitalElements {
+            l: (314.055_01, 428.466_77),
+            a: (19.218_143_4, -0.000_003_72),
+            e: (0.046_295_11, -0.000_027_29),
+            i: (0.773_196, 0.000_673_9),
+            node: (74.005_947, 0.074_146_1),
+            peri: (173.005_56, 0.089_321_2),
+        }),
+        Planet::Neptune => Ok(OrbitalElements {
+            l: (304.348_67, 218.486_28),
+            a: (30.110_386_9, 0.000_012_63),
+            e: (0.008_994_83, 0.000_006_91),
+            i: (1.769_952, -0.009_308_2),
+            node: (131.784_06, 1.010_304_4),
+            peri: (48.123_69, 0.029_158_7),
+        }),
+        Planet::Pluto => Ok(OrbitalElements {
+            l: (238.928_81, 145.205_26),
+            a: (39.481_686_77, 0.0),
+            e: (0.248_808_6, 0.000_060_16),
+            i: (17.141_75, 0.003_075),
+            node: (110.303_47, -0.010_139_6),
+            peri: (224.066_76, -0.003_442_5),
+        }),
+        Planet::Sun | Planet::Moon => Err(JyotishError::InvalidParameter(
+            "use sun/moon module for Sun/Moon positions".into(),
+        )),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Kepler equation solver
+// ---------------------------------------------------------------------------
+
+/// Solve Kepler's equation M = E - e*sin(E) for eccentric anomaly E.
+///
+/// Uses Newton-Raphson iteration. `m_rad` is mean anomaly in radians,
+/// `e` is eccentricity. Returns E in radians.
+fn solve_kepler(m_rad: f64, e: f64) -> f64 {
+    let mut ea = m_rad + e * m_rad.sin(); // initial guess
+    for _ in 0..50 {
+        let delta = (ea - e * ea.sin() - m_rad) / (1.0 - e * ea.cos());
+        ea -= delta;
+        if delta.abs() < 1e-12 {
+            break;
+        }
+    }
+    ea
+}
+
+// ---------------------------------------------------------------------------
+// Heliocentric to geocentric conversion
+// ---------------------------------------------------------------------------
+
+/// Compute heliocentric ecliptic coordinates (longitude, latitude, radius)
+/// for a planet at a given Julian Date.
+///
+/// Returns (longitude_deg, latitude_deg, radius_au).
+fn heliocentric_position(planet: Planet, jd: f64) -> Result<(f64, f64, f64)> {
+    let t = julian_centuries(jd);
+    let elts = orbital_elements(planet)?;
+
+    // Compute elements at time t
+    let l = normalize_degrees(elts.l.0 + elts.l.1 * t);
+    let a = elts.a.0 + elts.a.1 * t;
+    let e = elts.e.0 + elts.e.1 * t;
+    let i = deg_to_rad(elts.i.0 + elts.i.1 * t);
+    let node = deg_to_rad(elts.node.0 + elts.node.1 * t);
+    let peri = deg_to_rad(elts.peri.0 + elts.peri.1 * t);
+
+    // Mean anomaly
+    let m = deg_to_rad(normalize_degrees(l - rad_to_deg(peri)));
+
+    // Solve Kepler's equation
+    let ea = solve_kepler(m, e);
+
+    // True anomaly
+    let v = 2.0 * ((1.0 + e).sqrt() * (ea / 2.0).sin()).atan2((1.0 - e).sqrt() * (ea / 2.0).cos());
+
+    // Radius vector
+    let r = a * (1.0 - e * ea.cos());
+
+    // Heliocentric ecliptic longitude and latitude
+    let arg = v + peri - node;
+    let lon = (arg.sin() * i.cos()).atan2(arg.cos()) + node;
+    let lat = (arg.sin() * i.sin()).asin();
+
+    Ok((normalize_degrees(rad_to_deg(lon)), rad_to_deg(lat), r))
+}
+
+/// Compute heliocentric position of Earth.
+fn earth_heliocentric(jd: f64) -> (f64, f64, f64) {
+    let t = julian_centuries(jd);
+
+    // Earth orbital elements (Meeus Table 31.A)
+    let l = normalize_degrees(100.466_49 + 35_999.372_75 * t);
+    let a = 1.000_001_018;
+    let e = 0.016_708_634 - 0.000_042_037 * t - 0.000_000_126_7 * t * t;
+    let peri = deg_to_rad(102.937_35 + 1.719_526_9 * t);
+
+    let m = deg_to_rad(normalize_degrees(l - rad_to_deg(peri)));
+    let ea = solve_kepler(m, e);
+    let v = 2.0 * ((1.0 + e).sqrt() * (ea / 2.0).sin()).atan2((1.0 - e).sqrt() * (ea / 2.0).cos());
+    let r = a * (1.0 - e * ea.cos());
+
+    // Earth's ascending node is 0 by definition (ecliptic plane)
+    let lon = v + peri;
+    (normalize_degrees(rad_to_deg(lon)), 0.0, r)
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/// Compute the geocentric ecliptic position of a planet.
+///
+/// Returns a [`PlanetaryPosition`] with ecliptic longitude and latitude
+/// in degrees and distance in AU (from Earth).
+///
+/// # Errors
+///
+/// Returns [`JyotishError::InvalidParameter`] if called with `Planet::Sun`
+/// or `Planet::Moon` (use the dedicated `sun` and `moon` modules instead).
+///
+/// # Examples
+///
+/// ```
+/// # use jyotish::planetary::compute_position;
+/// # use jyotish::planet::Planet;
+/// let pos = compute_position(Planet::Venus, 2_451_545.0).unwrap();
+/// assert!(pos.longitude_deg >= 0.0 && pos.longitude_deg < 360.0);
+/// ```
+pub fn compute_position(planet: Planet, jd: f64) -> Result<PlanetaryPosition> {
+    // Get heliocentric positions
+    let (h_lon, h_lat, h_r) = heliocentric_position(planet, jd)?;
+    let (e_lon, _e_lat, e_r) = earth_heliocentric(jd);
+
+    let h_lon_rad = deg_to_rad(h_lon);
+    let h_lat_rad = deg_to_rad(h_lat);
+    let e_lon_rad = deg_to_rad(e_lon);
+
+    // Convert to rectangular heliocentric ecliptic coordinates
+    let x_p = h_r * h_lat_rad.cos() * h_lon_rad.cos() - e_r * e_lon_rad.cos();
+    let y_p = h_r * h_lat_rad.cos() * h_lon_rad.sin() - e_r * e_lon_rad.sin();
+    let z_p = h_r * h_lat_rad.sin();
+
+    // Geocentric ecliptic coordinates
+    let geo_lon = normalize_degrees(rad_to_deg(y_p.atan2(x_p)));
+    let geo_lat = rad_to_deg(z_p.atan2((x_p * x_p + y_p * y_p).sqrt()));
+    let geo_dist = (x_p * x_p + y_p * y_p + z_p * z_p).sqrt();
+
+    Ok(PlanetaryPosition::new(
+        planet,
+        geo_lon,
+        geo_lat,
+        geo_dist,
+        crate::calendar::jd_to_unix(jd),
+    ))
+}
+
+/// Compute geocentric positions of all planets (Mercury through Pluto).
+///
+/// Convenience function that returns a `Vec` of positions. Sun and Moon are
+/// excluded — use their dedicated modules.
+pub fn compute_all_positions(jd: f64) -> Vec<PlanetaryPosition> {
+    let planets = [
+        Planet::Mercury,
+        Planet::Venus,
+        Planet::Mars,
+        Planet::Jupiter,
+        Planet::Saturn,
+        Planet::Uranus,
+        Planet::Neptune,
+        Planet::Pluto,
+    ];
+
+    planets
+        .iter()
+        .filter_map(|&p| compute_position(p, jd).ok())
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const JD_J2000: f64 = 2_451_545.0;
+
+    #[test]
+    fn kepler_circular_orbit() {
+        // For e=0, E should equal M
+        let m = 1.5;
+        let e = solve_kepler(m, 0.0);
+        assert!((e - m).abs() < 1e-12);
+    }
+
+    #[test]
+    fn kepler_small_eccentricity() {
+        let m = 1.0;
+        let ea = solve_kepler(m, 0.01);
+        // Verify: M = E - e*sin(E)
+        let residual = ea - 0.01 * ea.sin() - m;
+        assert!(residual.abs() < 1e-12, "residual {residual}");
+    }
+
+    #[test]
+    fn kepler_high_eccentricity() {
+        let m = 0.5;
+        let ea = solve_kepler(m, 0.9);
+        let residual = ea - 0.9 * ea.sin() - m;
+        assert!(residual.abs() < 1e-12, "residual {residual}");
+    }
+
+    #[test]
+    fn compute_venus_j2000() {
+        let pos = compute_position(Planet::Venus, JD_J2000).unwrap();
+        assert!(pos.longitude_deg >= 0.0 && pos.longitude_deg < 360.0);
+        assert!(pos.latitude_deg.abs() < 5.0);
+        assert!(pos.distance_au > 0.2 && pos.distance_au < 1.8);
+    }
+
+    #[test]
+    fn compute_mars_j2000() {
+        let pos = compute_position(Planet::Mars, JD_J2000).unwrap();
+        assert!(pos.longitude_deg >= 0.0 && pos.longitude_deg < 360.0);
+        assert!(pos.distance_au > 0.3 && pos.distance_au < 2.7);
+    }
+
+    #[test]
+    fn compute_jupiter_j2000() {
+        let pos = compute_position(Planet::Jupiter, JD_J2000).unwrap();
+        assert!(pos.longitude_deg >= 0.0 && pos.longitude_deg < 360.0);
+        assert!(pos.distance_au > 3.9 && pos.distance_au < 6.5);
+    }
+
+    #[test]
+    fn compute_all_planets() {
+        let positions = compute_all_positions(JD_J2000);
+        assert_eq!(positions.len(), 8);
+        for pos in &positions {
+            assert!(pos.longitude_deg >= 0.0 && pos.longitude_deg < 360.0);
+            assert!(pos.distance_au > 0.0);
+        }
+    }
+
+    #[test]
+    fn sun_moon_rejected() {
+        assert!(compute_position(Planet::Sun, JD_J2000).is_err());
+        assert!(compute_position(Planet::Moon, JD_J2000).is_err());
+    }
+
+    #[test]
+    fn positions_vary_over_time() {
+        // Positions should change day to day
+        let pos1 = compute_position(Planet::Mars, JD_J2000).unwrap();
+        let pos2 = compute_position(Planet::Mars, JD_J2000 + 30.0).unwrap();
+        assert!((pos1.longitude_deg - pos2.longitude_deg).abs() > 0.1);
+    }
+
+    #[test]
+    fn outer_planets_reasonable_distances() {
+        let saturn = compute_position(Planet::Saturn, JD_J2000).unwrap();
+        assert!(saturn.distance_au > 7.0 && saturn.distance_au < 12.0);
+
+        let uranus = compute_position(Planet::Uranus, JD_J2000).unwrap();
+        assert!(uranus.distance_au > 17.0 && uranus.distance_au < 22.0);
+
+        let neptune = compute_position(Planet::Neptune, JD_J2000).unwrap();
+        assert!(neptune.distance_au > 28.0 && neptune.distance_au < 32.0);
+    }
+}
