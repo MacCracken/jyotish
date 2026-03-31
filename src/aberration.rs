@@ -127,9 +127,17 @@ pub fn annual_aberration(sun_lon: f64, obj_lon: f64, obj_lat: f64, obliquity: f6
     let _eps_r = deg_to_rad(obliquity); // reserved for full Ron-Vondrák
     let kappa = ABERRATION_CONSTANT / 3600.0; // convert to degrees
 
+    // Guard against division by zero near ecliptic poles (|lat| ≈ 90°)
+    let cos_lat = lat_r.cos();
+    let safe_cos_lat = if cos_lat.abs() < 1e-10 {
+        1e-10_f64.copysign(cos_lat)
+    } else {
+        cos_lat
+    };
+
     // Aberration in longitude (Meeus eq. 23.2)
-    let delta_lon = (-kappa * (sun_r - lon_r).cos() / lat_r.cos())
-        + (kappa * 0.016_708_634 * (deg_to_rad(102.937_35) - lon_r).cos() / lat_r.cos());
+    let delta_lon = (-kappa * (sun_r - lon_r).cos() / safe_cos_lat)
+        + (kappa * 0.016_708_634 * (deg_to_rad(102.937_35) - lon_r).cos() / safe_cos_lat);
 
     // Aberration in latitude (Meeus eq. 23.3)
     let delta_lat = -kappa

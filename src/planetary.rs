@@ -186,6 +186,10 @@ fn earth_heliocentric(jd: f64) -> (f64, f64, f64) {
 
 /// Compute the geocentric ecliptic position of a planet.
 ///
+/// `jd` should be in TT/TDB. Returns a geometric (uncorrected) position.
+/// For apparent positions with aberration and nutation, use
+/// [`crate::apparent::apparent_position`].
+///
 /// Returns a [`PlanetaryPosition`] with ecliptic longitude and latitude
 /// in degrees and distance in AU (from Earth).
 ///

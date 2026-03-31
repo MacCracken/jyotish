@@ -44,7 +44,12 @@ fn apparent_correction(t: f64) -> f64 {
 
 /// Compute the Sun's ecliptic longitude in degrees for a given Julian Date.
 ///
-/// Returns the apparent (corrected for nutation + aberration) ecliptic longitude.
+/// `jd` should be in TT (Terrestrial Time) or TDB (Barycentric Dynamical Time);
+/// use [`crate::delta_t::ut1_to_tt`] to convert from UT1 if needed.
+///
+/// Returns the geometric ecliptic longitude with a simplified nutation +
+/// aberration correction applied (Meeus Ch. 25). For the full apparent
+/// position pipeline, use [`crate::apparent::apparent_sun`].
 ///
 /// # Examples
 ///

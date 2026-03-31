@@ -1,14 +1,16 @@
 //! Apparent position pipeline.
 //!
 //! Converts geometric (raw ephemeris) positions into apparent positions
-//! by applying corrections in the correct order:
+//! by applying corrections:
 //!
-//! 1. **Light-time correction** — retarded position of the body
-//! 2. **Annual aberration** — Earth's orbital velocity effect (~20.5")
-//! 3. **Nutation** — short-period axis oscillation (~9" max)
+//! 1. **Annual aberration** — Earth's orbital velocity effect (~20.5")
+//! 2. **Nutation** — short-period axis oscillation (~9" max)
 //!
-//! The result is the position where the body actually appears on the sky,
-//! suitable for comparison with observations.
+//! Light-time correction is available separately via
+//! [`crate::aberration::light_time_correction`] for use cases that need
+//! heliocentric position functions as input.
+//!
+//! The result is the position where the body actually appears on the sky.
 
 use crate::aberration::apply_aberration;
 use crate::calendar::julian_centuries;
@@ -48,7 +50,7 @@ pub struct TypedPosition {
 
 /// Compute the apparent ecliptic position of a planet.
 ///
-/// Applies the full correction pipeline: light-time → aberration → nutation.
+/// Applies aberration and nutation corrections to the geometric position.
 /// This is the position where the body actually appears on the sky.
 ///
 /// # Errors
